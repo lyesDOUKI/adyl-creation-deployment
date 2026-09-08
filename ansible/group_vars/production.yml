@@ -114,8 +114,8 @@ mailing_enabled: true
 # Update these values when releasing a new version.
 # =========================================================================
 
-frontend_image: "ghcr.io/lyesdouki/adyl-creation-front:1.0.0"
-api_image: "ghcr.io/lyesdouki/adyl-creation-api:1.0.0"
+frontend_image: "ghcr.io/lyesdouki/adyl-creation-front:latest"
+api_image: "ghcr.io/lyesdouki/adyl-creation-api:latest"
 
 # =========================================================================
 # GHCR
