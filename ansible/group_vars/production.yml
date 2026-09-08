@@ -171,7 +171,7 @@ application_env_content: ""
 # TLS
 # =========================================================================
 
-application_tls_enabled: false
+application_tls_enabled: true
 
 letsencrypt_email: "CHANGE_ME"
 
