@@ -1,7 +1,10 @@
 #!/bin/sh
 set -eu
 
+# A renewed certificate is mounted into the reverse-proxy container.
+# Restarting the container makes Nginx load both the renewed certificate
+# and the current configuration from a clean process state.
 if docker ps --format '{{ '{{' }}.Names{{ '}}' }}' | grep -qx 'adyl-creation-proxy'; then
   docker exec adyl-creation-proxy nginx -t
-  docker exec adyl-creation-proxy nginx -s reload
+  docker compose -f {{ docker_directory }}/docker-compose.yml restart reverse-proxy
 fi

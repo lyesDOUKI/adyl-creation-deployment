@@ -79,7 +79,32 @@
         application_tls_enabled: true
 
     # The Nginx configuration is bind-mounted into the container.
-    # Flush the handler now so the play cannot finish while the running
-    # reverse proxy is still using the previous configuration.
-    - name: Apply final Nginx configuration
-      ansible.builtin.meta: flush_handlers
+    # Updating the mounted file does not recreate the Nginx process, and
+    # a reload is not sufficient for the HTTP -> HTTPS bootstrap transition
+    # on this stack because the TLS certificates did not exist when Nginx
+    # was first started. Restart the reverse proxy after the certificate
+    # exists and the HTTPS configuration has been rendered.
+    - name: Validate final Nginx configuration before restart
+      ansible.builtin.command:
+        cmd: docker exec adyl-creation-proxy nginx -t
+      changed_when: false
+
+    - name: Restart reverse proxy after HTTPS configuration
+      ansible.builtin.command:
+        cmd: docker compose restart reverse-proxy
+        chdir: "{{ docker_directory }}"
+      changed_when: true
+
+    - name: Wait for HTTPS endpoint
+      ansible.builtin.uri:
+        url: "https://{{ app_hostname }}"
+        status_code: [200, 301, 302, 404, 502]
+        validate_certs: true
+      register: https_endpoint_check
+      retries: 12
+      delay: 5
+      until: https_endpoint_check is succeeded
+
+    # This is a configuration validation only. It does not mean that a
+    # renewal happened. The task is successful when Certbot can simulate
+    # a renewal without errors.

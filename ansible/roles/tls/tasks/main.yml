@@ -70,7 +70,7 @@
     path: "{{ certbot_webroot }}/.well-known/acme-challenge/adyl-creation-healthcheck"
     state: absent
 
-- name: Test Certbot renewal configuration
+- name: Validate Certbot renewal configuration (dry run)
   ansible.builtin.command:
     cmd: certbot renew --dry-run
   register: certbot_dry_run

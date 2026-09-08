@@ -4,4 +4,4 @@
 .env
 *.p12
 *.pem
-ansible/runtime-vars.json
+.idea/
