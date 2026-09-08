@@ -1,212 +1,190 @@
 # Adyl Creation — Deployment
 
-Repository d'orchestration Docker pour la stack **Adyl Creation** : reverse proxy, frontend, API, PostgreSQL et Keycloak.
+This repository is the single source of truth for deploying the Adyl Creation
+runtime on the VPS.
+
+It contains no backend or frontend source code. It also contains no manually
+maintained Docker Compose, Nginx or Keycloak configuration outside Ansible.
+
+## Responsibilities
+
+- Ansible prepares and configures the VPS.
+- Ansible generates Docker Compose, Nginx configuration and the runtime `.env`.
+- Docker Compose runs the frontend, API, PostgreSQL, Keycloak and reverse proxy.
+- Let's Encrypt provides the TLS certificate.
+- GitHub Actions is only the execution layer: it injects secrets and starts
+  the Ansible playbook.
+- Terraform will later become the source of truth for Keycloak objects such as
+  the realm, clients, scopes, roles and mappers.
+
+## Repository structure
+
+- `.github/workflows/deploy.yml`: CI entry point for the Ansible deployment.
+- `ansible/playbook.yml`: deployment orchestration.
+- `ansible/group_vars/production.yml`: non-secret production configuration.
+- `ansible/roles/common`: base packages and directories.
+- `ansible/roles/security`: SSH, UFW and Fail2ban.
+- `ansible/roles/docker`: Docker Engine and Compose.
+- `ansible/roles/application`: generated Compose, Nginx and `.env`.
+- `ansible/roles/tls`: Let's Encrypt certificate provisioning and renewal.
+
+There are deliberately no local deployment scripts. The VPS is configured and
+deployed through Ansible only.
+
+## Runtime architecture
+
+Internet
+  |
+  v
+Nginx reverse proxy
+  |
+  +-- https://adyl-creation.<VPS_IP>.sslip.io/
+  |       |
+  |       +-- /       -> frontend:80
+  |       |
+  |       +-- /api/   -> api:8084
+  |
+  +-- https://api.<VPS_IP>.sslip.io/
+  |       |
+  |       +-- /       -> api:8084
+  |
+  +-- https://auth.<VPS_IP>.sslip.io/
+          |
+          +-- /       -> keycloak:8080
+
+PostgreSQL and the Keycloak PostgreSQL database are isolated on the internal
+Docker data network and are never published on the VPS.
+
+## First deployment
+
+The one-time VPS bootstrap is performed outside this repository using the
+existing OVH/admin access:
 
-Il ne contient **aucun code applicatif**.
+1. Create `user-deploy`.
+2. Install its SSH public key.
+3. Grant the required sudo access.
+4. Verify SSH access from the workstation with the deployment key.
+5. Store the private key and VPS host key in GitHub Actions Secrets.
 
-## Architecture
+After that bootstrap, GitHub Actions + Ansible own the VPS configuration.
 
-```text
-Internet / navigateur
-        │
-        ▼
-reverse-proxy (nginx)
-├── /       → frontend
-├── /api/   → api
-└── auth.*  → keycloak
+## GitHub Actions configuration
 
-        │
-        ▼
-┌─────────────────────────────────────┐
-│               proxy                 │
-│  Réseau public                      │
-│  reverse-proxy, frontend, api,      │
-│  keycloak                            │
-└────────────────┬────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────┐
-│                data                 │
-│  Réseau interne                     │
-│  api, postgres, keycloak,            │
-│  keycloak-db                         │
-└─────────────────────────────────────┘
-```
+Variables:
 
-### Isolation réseau
+- `VPS_HOST`: public IPv4 address of the VPS.
+- `VPS_USER`: normally `user-deploy`.
+- `GHCR_ENABLED`: `true` when the container registry requires authentication.
 
-* **postgres** et **keycloak-db** sont uniquement connectés au réseau `data`.
-* Le **frontend** et le **reverse-proxy** n'ont aucun accès direct aux bases de données.
-* Le réseau `proxy` permet uniquement les communications nécessaires entre le reverse proxy et les services exposés.
+Secrets:
 
-## Prérequis
+- `VPS_SSH_PRIVATE_KEY`
+- `VPS_KNOWN_HOSTS`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `KEYCLOAK_DB_NAME`
+- `KEYCLOAK_DB_USER`
+- `KEYCLOAK_DB_PASSWORD`
+- `KEYCLOAK_ADMIN_USERNAME`
+- `KEYCLOAK_ADMIN_PASSWORD`
+- `LETSENCRYPT_EMAIL`
+- `GHCR_USERNAME`
+- `GHCR_TOKEN`
+- `MAIL_HOST`
+- `MAIL_PORT`
+- `MAIL_USERNAME`
+- `MAIL_PASSWORD`
+- `MAIL_FROM`
+- `ADMIN_EMAIL`
 
-* Docker avec le plugin Compose
-* Accès aux images privées :
+The workflow creates a temporary runtime variables file on the GitHub runner.
+Ansible consumes it and deletes it after the run.
 
-```bash
-docker login ghcr.io
-```
+Secrets are never committed to the repository.
 
-* [mkcert](https://github.com/FiloSottile/mkcert) ou une CA locale pour générer les certificats SSL de développement
+## Deployment
 
+Open GitHub:
 
-## Mise en route
+Actions -> Deploy VPS infrastructure -> Run workflow
 
-### Configuration
+The workflow:
 
-Copier le fichier d'environnement :
+1. Installs Ansible and the required collections.
+2. Configures SSH using the dedicated deployment key and the trusted VPS host key.
+3. Injects GitHub Secrets as Ansible runtime variables.
+4. Runs `ansible/playbook.yml`.
+5. Ansible installs/configures the VPS.
+6. Ansible generates the runtime configuration.
+7. Docker Compose pulls the pinned images and starts the stack.
+8. Nginx is first deployed in HTTP bootstrap mode.
+9. Let's Encrypt validates all three sslip.io hostnames.
+10. Ansible switches Nginx to HTTPS and reloads the running Nginx process.
+11. The deployment ends with the HTTPS configuration active.
 
-```bash
-cp .env.example .env
-```
+## Important Nginx behavior
 
-Puis renseigner dans `.env` :
+Nginx configuration is bind-mounted into the reverse-proxy container.
 
-* les domaines utilisés ;
-* les versions des images ;
-* les identifiants ;
-* les paramètres de base de données ;
-* les paramètres de healthcheck.
+Changing a bind-mounted configuration file does not automatically reload the
+running Nginx process. The application role therefore notifies an Ansible
+handler that:
 
-### Hosts locaux
+1. validates the generated Nginx configuration with `nginx -t`;
+2. reloads the running Nginx process with `nginx -s reload`.
 
-Ajouter les domaines à `/etc/hosts` :
+This avoids the manual restart that would otherwise be required after the TLS
+configuration is generated.
 
-```text
-127.0.0.1 adyl-creation.local
-127.0.0.1 auth.adyl-creation.local
-```
+The application hostname also contains an explicit `/api/` location before
+the frontend catch-all location. Requests such as `/api/products` therefore
+reach the backend on port `8084` instead of being served by the frontend.
 
-### Certificats TLS
+## Images
 
-Générer les certificats HTTPS avec `mkcert` et les placer dans :
+Production image versions are pinned in:
 
-```text
-nginx/ssl/
-```
+`ansible/group_vars/production.yml`
 
-Placer également la CA correspondante dans :
+Current defaults:
 
-```text
-certificates/rootCA.pem
-```
+- `ghcr.io/lyesdouki/adyl-creation-front:1.0.0`
+- `ghcr.io/lyesdouki/adyl-creation-api:1.0.0`
+- `quay.io/keycloak/keycloak:26.7.2`
+- `postgres:17.10`
 
-Cette CA est utilisée pour configurer le **truststore Java de l'API**.
+Update the Ansible variables when publishing a new application release.
 
-### Déploiement
+## Persistence
 
-```bash
-./deploy.sh
-```
+Docker named volumes persist:
 
-## Commandes utiles
+- application PostgreSQL data;
+- Keycloak PostgreSQL data;
+- product photos.
 
-Vérifier l'état de la stack :
+A normal redeployment does not delete these volumes.
 
-```bash
-docker compose ps
-```
+## Keycloak
 
-Afficher les logs d'un service :
+Ansible deploys the Keycloak runtime and its database.
 
-```bash
-docker compose logs -f api
-```
+It does not create or modify the Keycloak realm configuration. That responsibility
+will be handled declaratively by Terraform.
 
-Arrêter la stack en conservant les données :
+## Database migrations
 
-```bash
-docker compose down
-```
+Flyway remains owned by the backend application. Ansible only starts the
+PostgreSQL service; it does not manage application schema migrations.
 
-Arrêter la stack et supprimer les volumes :
+## Security
 
-```bash
-docker compose down -v
-```
-
-> `docker compose down -v` supprime les volumes Docker associés à la stack et doit donc être utilisé uniquement pour un reset complet.
-
-## URLs de test
-
-**Frontend**
-
-```text
-https://adyl-creation.local/
-```
-
-**API**
-
-```text
-https://adyl-creation.local/api/products
-```
-
-**Keycloak**
-
-```text
-https://auth.adyl-creation.local/
-```
-
-## Configuration `.env`
-
-| Variable            | Description                      |
-| ------------------- | -------------------------------- |
-| `HTTP_PORT`         | Port exposé par le reverse proxy |
-| `APP_HOSTNAME`      | Domaine de l'application         |
-| `KEYCLOAK_HOSTNAME` | Domaine de Keycloak              |
-| `FRONTEND_IMAGE`    | Image frontend avec tag figé     |
-| `API_IMAGE`         | Image API avec tag figé          |
-| `POSTGRES_VERSION`  | Version de PostgreSQL            |
-| `KEYCLOAK_VERSION`  | Version de Keycloak              |
-| `POSTGRES_*`        | Configuration PostgreSQL         |
-| `KEYCLOAK_*`        | Configuration Keycloak           |
-| `*_HEALTHCHECK_*`   | Configuration des healthchecks   |
-
-## Rollback
-
-Les images utilisées sont versionnées avec des tags immuables.
-
-Pour revenir à une version précédente, modifier simplement les tags dans `.env` :
-
-```text
-FRONTEND_IMAGE=...
-API_IMAGE=...
-```
-
-Puis redéployer :
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-## Sécurité
-
-### Exposition PostgreSQL
-
-Le port `5433` de PostgreSQL est temporairement exposé afin de permettre les connexions depuis un client local comme **DBeaver** ou **SQL Developer**.
-
-Cette exposition est uniquement destinée au développement local.
-
-**Le port doit impérativement être supprimé du Compose avant tout déploiement en production ou sur un environnement partagé.**
-
-### Frontend en lecture seule
-
-Le conteneur frontend s'exécute avec :
-
-```yaml
-read_only: true
-```
-
-Cela limite les possibilités d'écriture du conteneur en cas de compromission.
-
-### Keycloak derrière le reverse proxy
-
-Keycloak utilise :
-
-```text
---proxy-headers=xforwarded
-```
-
-afin de prendre correctement en compte les en-têtes transmis par le reverse proxy et de générer les URLs HTTPS attendues.
+- PostgreSQL ports are not published to the Internet.
+- Keycloak is not published directly; it is reachable through Nginx.
+- Only SSH, HTTP and HTTPS are allowed by UFW.
+- Root SSH login is disabled.
+- Password-based SSH authentication is disabled.
+- Fail2ban protects SSH.
+- Frontend runs with a read-only filesystem.
+- Runtime secrets are stored in the generated `.env` with restrictive
+  permissions and are not committed to Git.

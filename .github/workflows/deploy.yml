@@ -53,12 +53,17 @@ jobs:
           
           chmod 600 "$HOME/.ssh/deploy_key"
           
-          # Créer un fichier de config SSH pour éviter les problèmes
+          # Trust only the VPS host key stored in GitHub Secrets.
+          # This keeps SSH host verification enabled in CI.
+          printf '%s\n' '${{ secrets.VPS_KNOWN_HOSTS }}' > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
           cat > "$HOME/.ssh/config" << EOF
           Host ${{ vars.VPS_HOST }}
             IdentityFile $HOME/.ssh/deploy_key
             User ${{ vars.VPS_USER }}
-            StrictHostKeyChecking no
+            UserKnownHostsFile $HOME/.ssh/known_hosts
+            StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
           EOF
@@ -99,7 +104,6 @@ jobs:
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          APPLICATION_ENV_CONTENT: ${{ secrets.APPLICATION_ENV_CONTENT }}
         run: |
           python3 - <<'PY'
           import json
@@ -122,7 +126,6 @@ jobs:
               "admin_email": os.environ.get("ADMIN_EMAIL", ""),
               "ghcr_username": os.environ.get("GHCR_USERNAME", ""),
               "ghcr_token": os.environ.get("GHCR_TOKEN", ""),
-              "application_env_content": os.environ.get("APPLICATION_ENV_CONTENT", ""),
           }
           
           with open("ansible/runtime-vars.json", "w", encoding="utf-8") as file:
@@ -138,8 +141,6 @@ jobs:
 
       - name: Run Ansible
         working-directory: ansible
-        env:
-          ANSIBLE_HOST_KEY_CHECKING: 'false'
         run: |
           ansible-playbook \
             -i inventory/production.ini \

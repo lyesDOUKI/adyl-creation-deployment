@@ -73,16 +73,8 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       SERVER_PORT: ${SERVER_PORT}
 
-{% if api_truststore_enabled %}
-      JAVA_TOOL_OPTIONS: "-Djavax.net.ssl.trustStore=/etc/java/truststore.p12 -Djavax.net.ssl.trustStorePassword=${API_TRUSTSTORE_PASSWORD}"
-{% endif %}
-
     volumes:
       - api_photos:/data/photos
-
-{% if api_truststore_enabled %}
-      - ./certificates/java-truststore.p12:/etc/java/truststore.p12:ro
-{% endif %}
 
     depends_on:
       postgres:
@@ -90,6 +82,9 @@ services:
 
       keycloak:
         condition: service_healthy
+
+    expose:
+      - "{{ server_port }}"
 
     networks:
       - proxy

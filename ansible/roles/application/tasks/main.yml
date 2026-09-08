@@ -14,6 +14,7 @@
     owner: "{{ deploy_user }}"
     group: "{{ deploy_user }}"
     mode: "0644"
+  notify: Validate Nginx configuration
 
 - name: Deploy Docker Compose
   ansible.builtin.template:
@@ -22,26 +23,6 @@
     owner: "{{ deploy_user }}"
     group: "{{ deploy_user }}"
     mode: "0644"
-
-- name: Create API certificates directory when truststore is enabled
-  ansible.builtin.file:
-    path: "{{ docker_directory }}/certificates"
-    state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
-    mode: "0750"
-  when: api_truststore_enabled | bool
-
-- name: Copy API Java truststore
-  ansible.builtin.copy:
-    src: "{{ api_truststore_source }}"
-    dest: "{{ docker_directory }}/certificates/java-truststore.p12"
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
-    mode: "0600"
-  when:
-    - api_truststore_enabled | bool
-    - api_truststore_source | length > 0
 
 - name: Deploy application environment
   ansible.builtin.template:

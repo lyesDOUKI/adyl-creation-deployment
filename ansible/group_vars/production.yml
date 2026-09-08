@@ -1,23 +1,28 @@
 ---
+# =========================================================================
+# Global deployment configuration
+# =========================================================================
+
 project_name: adyl-creation
 
 deploy_user: user-deploy
 ssh_port: 22
+
 app_root: /opt/adyl-creation
 docker_directory: "{{ app_root }}/docker"
 certbot_webroot: "{{ app_root }}/certbot/www"
 
 # =========================================================================
-# sslip.io
+# Public hostnames
 # =========================================================================
-# sslip.io derives DNS records from the VPS public IPv4 address.
+# sslip.io derives DNS resolution from the VPS public IPv4 address.
+# GitHub Actions supplies vps_ipv4 from the VPS_HOST repository variable.
 #
-# Example for 203.0.113.50:
-#   Frontend:  adyl-creation.203.0.113.50.sslip.io
-#   API:       api.203.0.113.50.sslip.io
-#   Keycloak:  auth.203.0.113.50.sslip.io
-#
-# VPS_HOST is passed by GitHub Actions as vps_ipv4.
+# Example:
+#   vps_ipv4 = 203.0.113.50
+#   app      = adyl-creation.203.0.113.50.sslip.io
+#   api      = api.203.0.113.50.sslip.io
+#   keycloak = auth.203.0.113.50.sslip.io
 # =========================================================================
 
 sslip_domain_suffix: "{{ vps_ipv4 }}.sslip.io"
@@ -38,11 +43,8 @@ https_port: 443
 # =========================================================================
 
 server_port: 8084
-
 app_base_url: "https://{{ app_hostname }}"
-
 app_photos_storage_path: "/data/photos"
-
 spring_profile: "docker"
 
 # =========================================================================
@@ -53,10 +55,6 @@ db_host: "postgres"
 db_port: 5432
 db_name: "adyl-creation"
 
-# =========================================================================
-# PostgreSQL container
-# =========================================================================
-
 postgres_version: "17.10"
 
 # =========================================================================
@@ -64,9 +62,7 @@ postgres_version: "17.10"
 # =========================================================================
 
 keycloak_version: "26.7.2"
-
 keycloak_image: "quay.io/keycloak/keycloak:26.7.2"
-
 keycloak_realm: "adyl-creation"
 
 # =========================================================================
@@ -74,11 +70,8 @@ keycloak_realm: "adyl-creation"
 # =========================================================================
 
 oidc_issuer_uri: "https://{{ keycloak_hostname }}/realms/{{ keycloak_realm }}"
-
 oidc_authorization_url: "https://{{ keycloak_hostname }}/realms/{{ keycloak_realm }}/protocol/openid-connect/auth"
-
 oidc_token_url: "https://{{ keycloak_hostname }}/realms/{{ keycloak_realm }}/protocol/openid-connect/token"
-
 oidc_audience: "adyl-creation-api"
 
 # =========================================================================
@@ -99,19 +92,10 @@ keycloak_healthcheck_retries: 20
 keycloak_healthcheck_start_period: "30s"
 
 # =========================================================================
-# Mailing - Brevo SMTP
-# =========================================================================
-# MAIL_HOST / MAIL_PORT / MAIL_USERNAME / MAIL_PASSWORD / MAIL_FROM /
-# ADMIN_EMAIL are supplied through GitHub Secrets.
-# =========================================================================
-
-mailing_enabled: true
-
-# =========================================================================
 # Container images
 # =========================================================================
-# Keep versions pinned in production.
-# Update these values when releasing a new version.
+# Production images are pinned to explicit versions.
+# Update these values when releasing a new application version.
 # =========================================================================
 
 frontend_image: "ghcr.io/lyesdouki/adyl-creation-front:latest"
@@ -124,14 +108,15 @@ api_image: "ghcr.io/lyesdouki/adyl-creation-api:latest"
 ghcr_enabled: false
 ghcr_registry: "ghcr.io"
 
+# Credentials are injected at runtime by GitHub Actions.
 ghcr_username: ""
 ghcr_token: ""
 
 # =========================================================================
 # Secrets
 # =========================================================================
-# These values are injected by GitHub Actions.
-# They must never be committed to Git.
+# Secrets are intentionally empty in Git.
+# GitHub Actions injects their values as Ansible extra variables.
 # =========================================================================
 
 postgres_user: ""
@@ -152,20 +137,10 @@ mail_from: ""
 admin_email: ""
 
 # =========================================================================
-# Optional Java truststore
+# Mailing
 # =========================================================================
 
-api_truststore_enabled: false
-api_truststore_source: ""
-api_truststore_password: "changeit"
-
-# =========================================================================
-# Additional application environment variables
-# =========================================================================
-
-application_extra_environment: {}
-
-application_env_content: ""
+mailing_enabled: true
 
 # =========================================================================
 # TLS
@@ -173,7 +148,7 @@ application_env_content: ""
 
 application_tls_enabled: true
 
-letsencrypt_email: "CHANGE_ME"
+letsencrypt_email: ""
 
 letsencrypt_certificate_name: "adyl-creation.{{ sslip_domain_suffix }}"
 

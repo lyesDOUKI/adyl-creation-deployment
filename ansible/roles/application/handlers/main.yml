@@ -1,0 +1,15 @@
+---
+# Nginx uses a bind-mounted configuration file. Docker Compose does not
+# restart the container merely because that mounted file changed.
+# Reload the running Nginx process instead of restarting the whole stack.
+
+- name: Validate Nginx configuration
+  ansible.builtin.command:
+    cmd: docker exec adyl-creation-proxy nginx -t
+  changed_when: false
+  notify: Reload Nginx
+
+- name: Reload Nginx
+  ansible.builtin.command:
+    cmd: docker exec adyl-creation-proxy nginx -s reload
+  changed_when: true

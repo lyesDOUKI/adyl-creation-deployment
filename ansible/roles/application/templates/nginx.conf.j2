@@ -3,6 +3,9 @@
 # =========================================================================
 # HTTP
 # =========================================================================
+# HTTP remains enabled for ACME HTTP-01 validation and redirects all normal
+# traffic to HTTPS.
+# =========================================================================
 
 server {
     listen 80;
@@ -45,7 +48,11 @@ server {
 
 
 # =========================================================================
-# HTTPS - Frontend
+# HTTPS - Application
+# =========================================================================
+# The browser uses the application hostname for the frontend and API.
+# /api/** is therefore routed to the backend before the catch-all frontend
+# location.
 # =========================================================================
 
 server {
@@ -60,6 +67,16 @@ server {
 
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
+    location /api/ {
+        proxy_pass http://api:8084;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
     location / {
         proxy_pass http://frontend:80;
         proxy_http_version 1.1;
@@ -73,7 +90,7 @@ server {
 
 
 # =========================================================================
-# HTTPS - Backend API
+# HTTPS - Dedicated API hostname
 # =========================================================================
 
 server {
@@ -130,7 +147,11 @@ server {
 {% else %}
 
 # =========================================================================
-# HTTP - Frontend
+# HTTP - Bootstrap mode
+# =========================================================================
+# This temporary configuration is used only before the Let's Encrypt
+# certificate exists. It lets Certbot validate the domains over HTTP.
+# The playbook immediately replaces it with the HTTPS configuration.
 # =========================================================================
 
 server {
@@ -139,6 +160,16 @@ server {
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
+    }
+
+    location /api/ {
+        proxy_pass http://api:8084;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location / {
@@ -152,10 +183,6 @@ server {
     }
 }
 
-
-# =========================================================================
-# HTTP - Backend API
-# =========================================================================
 
 server {
     listen 80;
@@ -176,10 +203,6 @@ server {
     }
 }
 
-
-# =========================================================================
-# HTTP - Keycloak
-# =========================================================================
 
 server {
     listen 80;

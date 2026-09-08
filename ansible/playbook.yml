@@ -77,3 +77,9 @@
         name: application
       vars:
         application_tls_enabled: true
+
+    # The Nginx configuration is bind-mounted into the container.
+    # Flush the handler now so the play cannot finish while the running
+    # reverse proxy is still using the previous configuration.
+    - name: Apply final Nginx configuration
+      ansible.builtin.meta: flush_handlers
