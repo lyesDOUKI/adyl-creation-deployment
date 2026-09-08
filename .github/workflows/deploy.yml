@@ -7,33 +7,63 @@ permissions:
   contents: read
 
 jobs:
+
   deploy:
+
     runs-on: ubuntu-latest
 
     steps:
+
+      # =====================================================================
+      # Checkout
+      # =====================================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
+
+
+      # =====================================================================
+      # Ansible
+      # =====================================================================
 
       - name: Install Ansible
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible
 
+
       - name: Install Ansible collections
         run: |
           ansible-galaxy collection install -r ansible/requirements.yml
+
+
+      # =====================================================================
+      # SSH
+      # =====================================================================
 
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+
         run: |
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
-          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/deploy_key"
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" \
+            > "$HOME/.ssh/deploy_key"
+
           chmod 600 "$HOME/.ssh/deploy_key"
-          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+
+          printf '%s\n' "$KNOWN_HOSTS" \
+            > "$HOME/.ssh/known_hosts"
+
           chmod 644 "$HOME/.ssh/known_hosts"
+
+
+      # =====================================================================
+      # SSH validation
+      # =====================================================================
 
       - name: Validate SSH access
         run: |
@@ -44,48 +74,126 @@ jobs:
             "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}" \
             'whoami'
 
+
+      # =====================================================================
+      # Prepare runtime Ansible variables
+      # =====================================================================
+
       - name: Prepare runtime Ansible variables
+
         env:
+
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
           KEYCLOAK_DB_NAME: ${{ secrets.KEYCLOAK_DB_NAME }}
           KEYCLOAK_DB_USER: ${{ secrets.KEYCLOAK_DB_USER }}
           KEYCLOAK_DB_PASSWORD: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
+
           KEYCLOAK_ADMIN_USERNAME: ${{ secrets.KEYCLOAK_ADMIN_USERNAME }}
           KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+
           LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
+
+          MAIL_HOST: ${{ secrets.MAIL_HOST }}
+          MAIL_PORT: ${{ secrets.MAIL_PORT }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+
           APPLICATION_ENV_CONTENT: ${{ secrets.APPLICATION_ENV_CONTENT }}
+
         run: |
+
           python3 - <<'PY'
+
           import json
           import os
 
           values = {
-              "postgres_user": os.environ.get("POSTGRES_USER", ""),
-              "postgres_password": os.environ.get("POSTGRES_PASSWORD", ""),
-              "keycloak_db_name": os.environ.get("KEYCLOAK_DB_NAME", ""),
-              "keycloak_db_user": os.environ.get("KEYCLOAK_DB_USER", ""),
-              "keycloak_db_password": os.environ.get("KEYCLOAK_DB_PASSWORD", ""),
-              "keycloak_admin_username": os.environ.get("KEYCLOAK_ADMIN_USERNAME", ""),
-              "keycloak_admin_password": os.environ.get("KEYCLOAK_ADMIN_PASSWORD", ""),
-              "letsencrypt_email": os.environ.get("LETSENCRYPT_EMAIL", ""),
-              "ghcr_username": os.environ.get("GHCR_USERNAME", ""),
-              "ghcr_token": os.environ.get("GHCR_TOKEN", ""),
-              "application_env_content": os.environ.get("APPLICATION_ENV_CONTENT", ""),
+
+              "postgres_user":
+                  os.environ.get("POSTGRES_USER", ""),
+
+              "postgres_password":
+                  os.environ.get("POSTGRES_PASSWORD", ""),
+
+              "keycloak_db_name":
+                  os.environ.get("KEYCLOAK_DB_NAME", "keycloak"),
+
+              "keycloak_db_user":
+                  os.environ.get("KEYCLOAK_DB_USER", ""),
+
+              "keycloak_db_password":
+                  os.environ.get("KEYCLOAK_DB_PASSWORD", ""),
+
+              "keycloak_admin_username":
+                  os.environ.get("KEYCLOAK_ADMIN_USERNAME", ""),
+
+              "keycloak_admin_password":
+                  os.environ.get("KEYCLOAK_ADMIN_PASSWORD", ""),
+
+              "letsencrypt_email":
+                  os.environ.get("LETSENCRYPT_EMAIL", ""),
+
+              "mail_host":
+                  os.environ.get("MAIL_HOST", ""),
+
+              "mail_port":
+                  os.environ.get("MAIL_PORT", ""),
+
+              "mail_username":
+                  os.environ.get("MAIL_USERNAME", ""),
+
+              "mail_password":
+                  os.environ.get("MAIL_PASSWORD", ""),
+
+              "mail_from":
+                  os.environ.get("MAIL_FROM", ""),
+
+              "admin_email":
+                  os.environ.get("ADMIN_EMAIL", ""),
+
+              "ghcr_username":
+                  os.environ.get("GHCR_USERNAME", ""),
+
+              "ghcr_token":
+                  os.environ.get("GHCR_TOKEN", ""),
+
+              "application_env_content":
+                  os.environ.get("APPLICATION_ENV_CONTENT", ""),
           }
 
-          with open("ansible/runtime-vars.json", "w", encoding="utf-8") as file:
+          with open(
+              "ansible/runtime-vars.json",
+              "w",
+              encoding="utf-8"
+          ) as file:
+
               json.dump(values, file)
+
           PY
+
           chmod 600 ansible/runtime-vars.json
 
+
+      # =====================================================================
+      # Ansible deployment
+      # =====================================================================
+
       - name: Run Ansible
+
         working-directory: ansible
+
         env:
           ANSIBLE_HOST_KEY_CHECKING: 'true'
+
         run: |
+
           ansible-playbook \
             -i inventory/production.ini \
             playbook.yml \
@@ -96,6 +204,14 @@ jobs:
             -e @runtime-vars.json \
             --private-key "$HOME/.ssh/deploy_key"
 
+
+      # =====================================================================
+      # Cleanup
+      # =====================================================================
+
       - name: Remove runtime secrets file
+
         if: always()
-        run: rm -f ansible/runtime-vars.json
+
+        run: |
+          rm -f ansible/runtime-vars.json

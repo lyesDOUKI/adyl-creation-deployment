@@ -1,4 +1,6 @@
+.ansible/
+*.retry
+*.log
 .env
-.idea
-*.pem
 *.p12
+*.pem

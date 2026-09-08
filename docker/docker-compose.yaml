@@ -1,138 +1,173 @@
-name: adyl-creation
-
 services:
-  reverse-proxy:
-    image: nginx:1.27-alpine
-    container_name: adyl-creation-proxy-integration
-    restart: unless-stopped
-    ports:
-      - "${HTTP_PORT:-80}:80"
-      - "443:443"
-    environment:
-      APP_HOSTNAME: ${APP_HOSTNAME}
-      KEYCLOAK_HOSTNAME: ${KEYCLOAK_HOSTNAME}
-    volumes:
-      - ./nginx/templates:/etc/nginx/templates:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      frontend:
-        condition: service_started
-      api:
-        condition: service_started
-      keycloak:
-        condition: service_healthy
-    networks:
-      proxy:
-        aliases:
-          - ${KEYCLOAK_HOSTNAME}
 
-  frontend:
-    image: ${FRONTEND_IMAGE}
-    container_name: adyl-creation-front-integration
+  # =========================================================================
+  # REVERSE PROXY
+  # =========================================================================
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: adyl-creation-nginx
     restart: unless-stopped
-    read_only: true
-    tmpfs:
-      - /var/cache/nginx
-      - /var/run
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ../certbot/www:/var/www/certbot:ro
+
+    depends_on:
+      - frontend
+      - api
+      - keycloak
+
     networks:
       - proxy
 
+  # =========================================================================
+  # FRONTEND
+  # =========================================================================
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    container_name: adyl-creation-frontend
+    restart: unless-stopped
+
+    expose:
+      - "80"
+
+    networks:
+      - proxy
+
+  # =========================================================================
+  # BACKEND API
+  # =========================================================================
   api:
     image: ${API_IMAGE}
-    container_name: adyl-creation-api-integration
+    container_name: adyl-creation-api
     restart: unless-stopped
-    env_file:
-      - .env
+
+    expose:
+      - "8080"
+
     environment:
-      SPRING_PROFILES_ACTIVE: docker
-      JAVA_TOOL_OPTIONS: "-Djavax.net.ssl.trustStore=/etc/java/truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit"
-    volumes:
-      - api_photos:/data/photos
-      - ./certificates/java-truststore.p12:/etc/java/truststore.p12:ro
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://${KEYCLOAK_HOSTNAME}/realms/${KEYCLOAK_REALM}
+      - ${APPLICATION_EXTRA_ENVIRONMENT}
+
     depends_on:
       postgres:
         condition: service_healthy
       keycloak:
-        condition: service_healthy
+        condition: service_started
+
     networks:
       - proxy
       - data
 
+  # =========================================================================
+  # APPLICATION DATABASE
+  # =========================================================================
   postgres:
-    image: postgres:${POSTGRES_VERSION}
-    container_name: adyl-creation-postgres-integration
+    image: postgres:${POSTGRES_IMAGE_TAG:-17-alpine}
+    container_name: adyl-creation-postgres
     restart: unless-stopped
-    ports:
-      - "5433:5432"
+
     environment:
-      POSTGRES_DB: adyl-creation
+      POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ../data/postgres:/var/lib/postgresql/data
+
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "adyl-creation"]
-      interval: ${POSTGRES_HEALTHCHECK_INTERVAL}
-      timeout: ${POSTGRES_HEALTHCHECK_TIMEOUT}
-      retries: ${POSTGRES_HEALTHCHECK_RETRIES}
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
     networks:
       - data
 
+  # =========================================================================
+  # KEYCLOAK DATABASE
+  # =========================================================================
   keycloak-db:
-    image: postgres:17-alpine
-    container_name: adyl-creation-keycloak-db-integration
+    image: postgres:${KEYCLOAK_DB_IMAGE_TAG:-17-alpine}
+    container_name: adyl-creation-keycloak-db
     restart: unless-stopped
+
     environment:
       POSTGRES_DB: ${KEYCLOAK_DB_NAME}
       POSTGRES_USER: ${KEYCLOAK_DB_USER}
       POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+
     volumes:
-      - keycloak_db_data:/var/lib/postgresql/data
+      - ../data/keycloak:/var/lib/postgresql/data
+
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${KEYCLOAK_DB_USER}", "-d", "${KEYCLOAK_DB_NAME}"]
-      interval: ${KEYCLOAK_DB_HEALTHCHECK_INTERVAL}
-      timeout: ${KEYCLOAK_DB_HEALTHCHECK_TIMEOUT}
-      retries: ${KEYCLOAK_DB_HEALTHCHECK_RETRIES}
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${KEYCLOAK_DB_USER} -d ${KEYCLOAK_DB_NAME}
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
     networks:
       - data
 
+  # =========================================================================
+  # KEYCLOAK
+  # =========================================================================
   keycloak:
-    build:
-      context: ./keycloak
-      args:
-        - KEYCLOAK_VERSION=${KEYCLOAK_VERSION}
-    container_name: adyl-creation-keycloak-integration
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.7.2}
+    container_name: adyl-creation-keycloak
     restart: unless-stopped
+
     command:
+      - start
       - --http-enabled=true
       - --hostname=${KEYCLOAK_HOSTNAME}
-      - --health-enabled=true
       - --proxy-headers=xforwarded
+      - --health-enabled=true
+
     environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/${KEYCLOAK_DB_NAME}
       KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+
     depends_on:
       keycloak-db:
         condition: service_healthy
-    healthcheck:
-      test: [ "CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep '200' <&3" ]
-      interval: ${KEYCLOAK_HEALTHCHECK_INTERVAL}
-      timeout: ${KEYCLOAK_HEALTHCHECK_TIMEOUT}
-      retries: ${KEYCLOAK_HEALTHCHECK_RETRIES}
-      start_period: ${KEYCLOAK_HEALTHCHECK_START_PERIOD}
+
+    expose:
+      - "8080"
+
     networks:
       - proxy
       - data
 
-volumes:
-  postgres_data:
-  keycloak_db_data:
-  api_photos:
+# ===========================================================================
+# NETWORKS
+# ===========================================================================
 
 networks:
+
   proxy:
+    name: adyl-creation-proxy
+
   data:
+    name: adyl-creation-data
+    internal: true

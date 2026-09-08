@@ -1,63 +1,183 @@
 ---
 project_name: adyl-creation
+
 deploy_user: user-deploy
+
 app_root: /opt/adyl-creation
 docker_directory: "{{ app_root }}/docker"
 certbot_webroot: "{{ app_root }}/certbot/www"
 
+# =========================================================================
+# sslip.io
+# =========================================================================
 # sslip.io derives DNS records from the VPS public IPv4 address.
+#
 # Example for 203.0.113.50:
-#   frontend: adyl-creation.203.0.113.50.sslip.io
-#   API:      api.203.0.113.50.sslip.io
-#   Keycloak: auth.203.0.113.50.sslip.io
-# The GitHub workflow passes VPS_HOST as vps_ipv4 automatically.
+#   Frontend:  adyl-creation.203.0.113.50.sslip.io
+#   API:       api.203.0.113.50.sslip.io
+#   Keycloak:  auth.203.0.113.50.sslip.io
+#
+# VPS_HOST is passed by GitHub Actions as vps_ipv4.
+# =========================================================================
+
 sslip_domain_suffix: "{{ vps_ipv4 }}.sslip.io"
+
 app_hostname: "adyl-creation.{{ sslip_domain_suffix }}"
 api_hostname: "api.{{ sslip_domain_suffix }}"
 keycloak_hostname: "auth.{{ sslip_domain_suffix }}"
 
-ssh_port: 22
+# =========================================================================
+# Reverse proxy
+# =========================================================================
+
 http_port: 80
 https_port: 443
 
-letsencrypt_email: "CHANGE_ME"
-letsencrypt_certificate_name: "adyl-creation.{{ sslip_domain_suffix }}"
-letsencrypt_domains:
-  - "{{ app_hostname }}"
-  - "{{ api_hostname }}"
-  - "{{ keycloak_hostname }}"
+# =========================================================================
+# Application
+# =========================================================================
 
-postgres_version: "17-alpine"
+server_port: 8084
+
+app_base_url: "https://{{ app_hostname }}"
+
+app_photos_storage_path: "/data/photos"
+
+spring_profile: "docker"
+
+# =========================================================================
+# Application database
+# =========================================================================
+
+db_host: "postgres"
+db_port: 5432
+db_name: "adyl-creation"
+
+# =========================================================================
+# PostgreSQL container
+# =========================================================================
+
+postgres_version: "17.10"
+
+# =========================================================================
+# Keycloak
+# =========================================================================
+
 keycloak_version: "26.7.2"
 
-frontend_image: "ghcr.io/lyesdouki/adyl-creation-front:latest"
-api_image: "ghcr.io/lyesdouki/adyl-creation-back:latest"
+keycloak_image: "quay.io/keycloak/keycloak:26.7.2"
 
-# Set to true only if GHCR requires authentication.
+keycloak_realm: "adyl-creation"
+
+# =========================================================================
+# OIDC
+# =========================================================================
+
+oidc_issuer_uri: "https://{{ keycloak_hostname }}/realms/{{ keycloak_realm }}"
+
+oidc_authorization_url: "https://{{ keycloak_hostname }}/realms/{{ keycloak_realm }}/protocol/openid-connect/auth"
+
+oidc_token_url: "https://{{ keycloak_hostname }}/realms/{{ keycloak_realm }}/protocol/openid-connect/token"
+
+oidc_audience: "adyl-creation-api"
+
+# =========================================================================
+# Healthchecks
+# =========================================================================
+
+postgres_healthcheck_interval: "10s"
+postgres_healthcheck_timeout: "5s"
+postgres_healthcheck_retries: 10
+
+keycloak_db_healthcheck_interval: "10s"
+keycloak_db_healthcheck_timeout: "5s"
+keycloak_db_healthcheck_retries: 10
+
+keycloak_healthcheck_interval: "15s"
+keycloak_healthcheck_timeout: "5s"
+keycloak_healthcheck_retries: 20
+keycloak_healthcheck_start_period: "30s"
+
+# =========================================================================
+# Mailing - Brevo SMTP
+# =========================================================================
+# MAIL_HOST / MAIL_PORT / MAIL_USERNAME / MAIL_PASSWORD / MAIL_FROM /
+# ADMIN_EMAIL are supplied through GitHub Secrets.
+# =========================================================================
+
+mailing_enabled: true
+
+# =========================================================================
+# Container images
+# =========================================================================
+# Keep versions pinned in production.
+# Update these values when releasing a new version.
+# =========================================================================
+
+frontend_image: "ghcr.io/lyesdouki/adyl-creation-front:1.0.0"
+api_image: "ghcr.io/lyesdouki/adyl-creation-api:1.0.0"
+
+# =========================================================================
+# GHCR
+# =========================================================================
+
 ghcr_enabled: false
-ghcr_registry: ghcr.io
+ghcr_registry: "ghcr.io"
 
 ghcr_username: ""
 ghcr_token: ""
 
-# Application secrets are supplied by GitHub Actions as extra vars.
+# =========================================================================
+# Secrets
+# =========================================================================
+# These values are injected by GitHub Actions.
+# They must never be committed to Git.
+# =========================================================================
+
 postgres_user: ""
 postgres_password: ""
+
 keycloak_db_name: "keycloak"
 keycloak_db_user: ""
 keycloak_db_password: ""
+
 keycloak_admin_username: ""
 keycloak_admin_password: ""
 
-# Optional Java truststore used by the API. Leave disabled if not required.
+mail_host: ""
+mail_port: ""
+mail_username: ""
+mail_password: ""
+mail_from: ""
+admin_email: ""
+
+# =========================================================================
+# Optional Java truststore
+# =========================================================================
+
 api_truststore_enabled: false
 api_truststore_source: ""
 api_truststore_password: "changeit"
 
-# Application-specific environment values can be added here or passed by CI.
+# =========================================================================
+# Additional application environment variables
+# =========================================================================
+
 application_extra_environment: {}
+
 application_env_content: ""
+
+# =========================================================================
+# TLS
+# =========================================================================
 
 application_tls_enabled: false
 
-keycloak_image: "quay.io/keycloak/keycloak:26.7.2"
+letsencrypt_email: "CHANGE_ME"
+
+letsencrypt_certificate_name: "adyl-creation.{{ sslip_domain_suffix }}"
+
+letsencrypt_domains:
+  - "{{ app_hostname }}"
+  - "{{ api_hostname }}"
+  - "{{ keycloak_hostname }}"
