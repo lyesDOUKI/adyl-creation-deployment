@@ -1,0 +1,79 @@
+---
+- name: Bootstrap and deploy Adyl Creation VPS
+  hosts: production
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Validate Let's Encrypt email
+      ansible.builtin.assert:
+        that:
+          - letsencrypt_email is defined
+          - letsencrypt_email != 'CHANGE_ME'
+          - letsencrypt_email | length > 0
+        fail_msg: "Set letsencrypt_email in group_vars/production.yml before deployment."
+
+    - name: Validate VPS IPv4 for sslip.io
+      ansible.builtin.assert:
+        that:
+          - vps_ipv4 is defined
+          - vps_ipv4 | regex_search('^([0-9]{1,3}\\.){3}[0-9]{1,3}$')
+        fail_msg: "VPS_HOST must be the public IPv4 address of the VPS when using sslip.io."
+
+    - name: Validate generated sslip.io hostnames
+      ansible.builtin.assert:
+        that:
+          - app_hostname == 'adyl-creation.' ~ vps_ipv4 ~ '.sslip.io'
+          - api_hostname == 'api.' ~ vps_ipv4 ~ '.sslip.io'
+          - keycloak_hostname == 'auth.' ~ vps_ipv4 ~ '.sslip.io'
+        fail_msg: "The sslip.io hostnames do not match vps_ipv4."
+
+    - name: Validate required application secrets
+      ansible.builtin.assert:
+        that:
+          - postgres_user | length > 0
+          - postgres_password | length > 0
+          - keycloak_db_name | length > 0
+          - keycloak_db_user | length > 0
+          - keycloak_db_password | length > 0
+          - keycloak_admin_username | length > 0
+          - keycloak_admin_password | length > 0
+        fail_msg: "One or more required application secrets are missing from GitHub Actions."
+
+  tasks:
+    - name: Run common role
+      ansible.builtin.include_role:
+        name: common
+
+    - name: Run security role
+      ansible.builtin.include_role:
+        name: security
+
+    - name: Run Docker role
+      ansible.builtin.include_role:
+        name: docker
+
+    - name: Log in to GHCR when enabled
+      community.docker.docker_login:
+        registry_url: "{{ ghcr_registry }}"
+        username: "{{ ghcr_username }}"
+        password: "{{ ghcr_token }}"
+        reauthorize: true
+      when: ghcr_enabled | bool
+      no_log: true
+
+    - name: Deploy application in HTTP-only bootstrap mode
+      ansible.builtin.include_role:
+        name: application
+      vars:
+        application_tls_enabled: false
+
+    - name: Run TLS role
+      ansible.builtin.include_role:
+        name: tls
+
+    - name: Enable HTTPS configuration
+      ansible.builtin.include_role:
+        name: application
+      vars:
+        application_tls_enabled: true

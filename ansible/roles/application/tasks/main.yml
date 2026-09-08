@@ -1,0 +1,83 @@
+---
+- name: Create Nginx configuration directory
+  ansible.builtin.file:
+    path: "{{ docker_directory }}/nginx"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0755"
+
+- name: Deploy Nginx configuration
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ docker_directory }}/nginx/nginx.conf"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0644"
+
+- name: Deploy Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_directory }}/docker-compose.yml"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0644"
+
+- name: Create API certificates directory when truststore is enabled
+  ansible.builtin.file:
+    path: "{{ docker_directory }}/certificates"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0750"
+  when: api_truststore_enabled | bool
+
+- name: Copy API Java truststore
+  ansible.builtin.copy:
+    src: "{{ api_truststore_source }}"
+    dest: "{{ docker_directory }}/certificates/java-truststore.p12"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0600"
+  when:
+    - api_truststore_enabled | bool
+    - api_truststore_source | length > 0
+
+- name: Deploy application environment
+  ansible.builtin.template:
+    src: .env.j2
+    dest: "{{ docker_directory }}/.env"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Validate Docker Compose configuration
+  ansible.builtin.command:
+    cmd: docker compose config -q
+    chdir: "{{ docker_directory }}"
+  changed_when: false
+  no_log: true
+
+- name: Pull application images
+  ansible.builtin.command:
+    cmd: docker compose pull
+    chdir: "{{ docker_directory }}"
+  register: compose_pull
+  changed_when: true
+
+- name: Start application stack
+  ansible.builtin.command:
+    cmd: docker compose up -d --remove-orphans
+    chdir: "{{ docker_directory }}"
+  register: compose_up
+  changed_when: true
+
+- name: Wait for reverse proxy
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ http_port }}"
+    status_code: [200, 301, 302, 404, 502]
+  register: reverse_proxy_check
+  retries: 12
+  delay: 5
+  until: reverse_proxy_check is succeeded

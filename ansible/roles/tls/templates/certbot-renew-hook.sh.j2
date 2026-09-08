@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+if docker ps --format '{{ '{{' }}.Names{{ '}}' }}' | grep -qx 'adyl-creation-proxy'; then
+  docker exec adyl-creation-proxy nginx -t
+  docker exec adyl-creation-proxy nginx -s reload
+fi

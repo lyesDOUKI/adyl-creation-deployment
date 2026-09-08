@@ -1,0 +1,63 @@
+---
+project_name: adyl-creation
+deploy_user: user-deploy
+app_root: /opt/adyl-creation
+docker_directory: "{{ app_root }}/docker"
+certbot_webroot: "{{ app_root }}/certbot/www"
+
+# sslip.io derives DNS records from the VPS public IPv4 address.
+# Example for 203.0.113.50:
+#   frontend: adyl-creation.203.0.113.50.sslip.io
+#   API:      api.203.0.113.50.sslip.io
+#   Keycloak: auth.203.0.113.50.sslip.io
+# The GitHub workflow passes VPS_HOST as vps_ipv4 automatically.
+sslip_domain_suffix: "{{ vps_ipv4 }}.sslip.io"
+app_hostname: "adyl-creation.{{ sslip_domain_suffix }}"
+api_hostname: "api.{{ sslip_domain_suffix }}"
+keycloak_hostname: "auth.{{ sslip_domain_suffix }}"
+
+ssh_port: 22
+http_port: 80
+https_port: 443
+
+letsencrypt_email: "CHANGE_ME"
+letsencrypt_certificate_name: "adyl-creation.{{ sslip_domain_suffix }}"
+letsencrypt_domains:
+  - "{{ app_hostname }}"
+  - "{{ api_hostname }}"
+  - "{{ keycloak_hostname }}"
+
+postgres_version: "17-alpine"
+keycloak_version: "26.7.2"
+
+frontend_image: "ghcr.io/lyesdouki/adyl-creation-front:latest"
+api_image: "ghcr.io/lyesdouki/adyl-creation-back:latest"
+
+# Set to true only if GHCR requires authentication.
+ghcr_enabled: false
+ghcr_registry: ghcr.io
+
+ghcr_username: ""
+ghcr_token: ""
+
+# Application secrets are supplied by GitHub Actions as extra vars.
+postgres_user: ""
+postgres_password: ""
+keycloak_db_name: "keycloak"
+keycloak_db_user: ""
+keycloak_db_password: ""
+keycloak_admin_username: ""
+keycloak_admin_password: ""
+
+# Optional Java truststore used by the API. Leave disabled if not required.
+api_truststore_enabled: false
+api_truststore_source: ""
+api_truststore_password: "changeit"
+
+# Application-specific environment values can be added here or passed by CI.
+application_extra_environment: {}
+application_env_content: ""
+
+application_tls_enabled: false
+
+keycloak_image: "quay.io/keycloak/keycloak:26.7.2"

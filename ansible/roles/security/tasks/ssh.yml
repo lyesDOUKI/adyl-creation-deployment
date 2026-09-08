@@ -1,0 +1,18 @@
+---
+- name: Configure SSH hardening
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/99-adyl-creation.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Port {{ ssh_port }}
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PubkeyAuthentication yes
+      AllowUsers {{ deploy_user }}
+      X11Forwarding no
+      AllowTcpForwarding no
+      MaxAuthTries 3
+  notify: Restart SSH

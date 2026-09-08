@@ -1,0 +1,10 @@
+---
+- name: Configure passwordless sudo for deployment user
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ deploy_user }}"
+    owner: root
+    group: root
+    mode: "0440"
+    content: |
+      {{ deploy_user }} ALL=(ALL) NOPASSWD:ALL
+    validate: "/usr/sbin/visudo -cf %s"

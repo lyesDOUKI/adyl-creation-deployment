@@ -1,0 +1,77 @@
+---
+- name: Create Let's Encrypt live directory
+  ansible.builtin.file:
+    path: /etc/letsencrypt
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create ACME challenge directory
+  ansible.builtin.file:
+    path: "{{ certbot_webroot }}/.well-known/acme-challenge"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0755"
+
+- name: Create ACME challenge test file
+  ansible.builtin.copy:
+    dest: "{{ certbot_webroot }}/.well-known/acme-challenge/adyl-creation-healthcheck"
+    content: "adyl-creation-letsencrypt-ready\n"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0644"
+
+- name: Verify ACME challenge file is publicly served
+  ansible.builtin.uri:
+    url: "http://{{ item }}/.well-known/acme-challenge/adyl-creation-healthcheck"
+    status_code: 200
+    return_content: true
+  loop: "{{ letsencrypt_domains }}"
+  register: acme_public_checks
+  retries: 12
+  delay: 5
+  until:
+    - acme_public_checks is succeeded
+
+- name: Check whether Let's Encrypt certificate exists
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ letsencrypt_certificate_name }}/fullchain.pem"
+  register: letsencrypt_certificate
+
+- name: Request Let's Encrypt certificate
+  ansible.builtin.command:
+    cmd: >-
+      certbot certonly
+      --webroot
+      --webroot-path {{ certbot_webroot }}
+      --non-interactive
+      --agree-tos
+      --email {{ letsencrypt_email }}
+      --cert-name {{ letsencrypt_certificate_name }}
+      -d {{ letsencrypt_domains[0] }}
+      -d {{ letsencrypt_domains[1] }}
+      -d {{ letsencrypt_domains[2] }}
+  when: not letsencrypt_certificate.stat.exists
+  register: certbot_request
+  changed_when: true
+
+- name: Install Certbot deploy hook
+  ansible.builtin.template:
+    src: certbot-renew-hook.sh.j2
+    dest: /etc/letsencrypt/renewal-hooks/deploy/adyl-creation-nginx-reload.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Remove ACME challenge test file
+  ansible.builtin.file:
+    path: "{{ certbot_webroot }}/.well-known/acme-challenge/adyl-creation-healthcheck"
+    state: absent
+
+- name: Test Certbot renewal configuration
+  ansible.builtin.command:
+    cmd: certbot renew --dry-run
+  register: certbot_dry_run
+  changed_when: false
