@@ -2,7 +2,7 @@
 project_name: adyl-creation
 
 deploy_user: user-deploy
-
+ssh_port: 22
 app_root: /opt/adyl-creation
 docker_directory: "{{ app_root }}/docker"
 certbot_webroot: "{{ app_root }}/certbot/www"
