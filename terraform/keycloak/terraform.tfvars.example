@@ -1,0 +1,42 @@
+# =========================================================================
+# KEYCLOAK CONNECTION
+# =========================================================================
+
+# Public Keycloak URL
+keycloak_url = "https://auth.XXX.XXX.XXX.XXX.sslip.io"
+
+# Terraform administration credentials
+keycloak_username = "admin"
+keycloak_password = "CHANGE_ME"
+
+# Client used by Terraform to administer Keycloak
+keycloak_client_id = "admin-cli"
+
+
+# =========================================================================
+# REALM
+# =========================================================================
+
+keycloak_realm = "adyl-creation"
+
+
+# =========================================================================
+# APPLICATION
+# =========================================================================
+
+frontend_url = "https://adyl-creation.XXX.XXX.XXX.XXX.sslip.io"
+
+
+# =========================================================================
+# ADMIN USER
+# =========================================================================
+
+admin_username = "admin"
+
+admin_password = "CHANGE_ME"
+
+admin_email = "admin@example.com"
+
+admin_first_name = "Admin"
+
+admin_last_name = "Adyl Creation"
