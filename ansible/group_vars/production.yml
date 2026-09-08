@@ -22,7 +22,7 @@ certbot_webroot: "{{ app_root }}/certbot/www"
 
 sslip_domain_suffix: "{{ vps_ipv4 }}.sslip.io"
 
-app_hostname: "adyl-creation.{{ sslip_domain_suffix }}"
+app_hostname: "adyl.{{ sslip_domain_suffix }}"
 api_hostname: "api.{{ sslip_domain_suffix }}"
 keycloak_hostname: "auth.{{ sslip_domain_suffix }}"
 
@@ -174,7 +174,7 @@ application_env_content: ""
 application_tls_enabled: true
 
 letsencrypt_email: "CHANGE_ME"
-
+letsencrypt_staging: ""
 letsencrypt_certificate_name: "adyl-creation.{{ sslip_domain_suffix }}"
 
 letsencrypt_domains:

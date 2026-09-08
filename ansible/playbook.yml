@@ -23,7 +23,7 @@
     - name: Validate generated sslip.io hostnames
       ansible.builtin.assert:
         that:
-          - app_hostname == 'adyl-creation.' ~ vps_ipv4 ~ '.sslip.io'
+          - app_hostname == 'adyl.' ~ vps_ipv4 ~ '.sslip.io'
           - api_hostname == 'api.' ~ vps_ipv4 ~ '.sslip.io'
           - keycloak_hostname == 'auth.' ~ vps_ipv4 ~ '.sslip.io'
         fail_msg: "The sslip.io hostnames do not match vps_ipv4."
@@ -104,7 +104,4 @@
       retries: 12
       delay: 5
       until: https_endpoint_check is succeeded
-
-    # This is a configuration validation only. It does not mean that a
-    # renewal happened. The task is successful when Certbot can simulate
-    # a renewal without errors.
+      when: letsencrypt_staging | bool == false

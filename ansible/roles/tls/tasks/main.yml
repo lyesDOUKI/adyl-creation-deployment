@@ -50,6 +50,7 @@
       --agree-tos
       --email {{ letsencrypt_email }}
       --cert-name {{ letsencrypt_certificate_name }}
+      {{ '--staging' if letsencrypt_staging | default(false) | bool else '' }}
       -d {{ letsencrypt_domains[0] }}
       -d {{ letsencrypt_domains[1] }}
       -d {{ letsencrypt_domains[2] }}

@@ -100,6 +100,7 @@ jobs:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           APPLICATION_ENV_CONTENT: ${{ secrets.APPLICATION_ENV_CONTENT }}
+          LETSENCRYPT_STAGING: ${{ secrets.LETSENCRYPT_STAGING }}
         run: |
           python3 - <<'PY'
           import json
@@ -123,6 +124,7 @@ jobs:
               "ghcr_username": os.environ.get("GHCR_USERNAME", ""),
               "ghcr_token": os.environ.get("GHCR_TOKEN", ""),
               "application_env_content": os.environ.get("APPLICATION_ENV_CONTENT", ""),
+              "letsencrypt_staging": os.environ.get("LETSENCRYPT_STAGING", "")
           }
           
           with open("ansible/runtime-vars.json", "w", encoding="utf-8") as file:

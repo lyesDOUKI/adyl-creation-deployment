@@ -77,7 +77,9 @@
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ http_port }}"
     status_code: [200, 301, 302, 404, 502]
+    validate_certs: false
   register: reverse_proxy_check
   retries: 12
   delay: 5
+  when: letsencrypt_staging | bool == false
   until: reverse_proxy_check is succeeded
