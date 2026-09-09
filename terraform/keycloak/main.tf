@@ -5,6 +5,24 @@
 resource "keycloak_realm" "adyl_creation" {
   realm   = var.keycloak_realm
   enabled = true
+
+  # -----------------------------------------------------------------------
+  # User registration
+  # -----------------------------------------------------------------------
+
+  registration_allowed = true
+
+  # -----------------------------------------------------------------------
+  # Internationalization
+  # -----------------------------------------------------------------------
+
+  internationalization {
+    supported_locales = [
+      "fr"
+    ]
+
+    default_locale = "fr"
+  }
 }
 
 
@@ -46,7 +64,7 @@ resource "keycloak_openid_audience_protocol_mapper" "api_audience" {
   realm_id        = keycloak_realm.adyl_creation.id
   client_scope_id = keycloak_openid_client_scope.api.id
 
-  name    = "adyl-creation-api-audience"
+  name = "adyl-creation-api-audience"
 
   included_client_audience = keycloak_openid_client.api.client_id
 }
@@ -93,7 +111,7 @@ resource "keycloak_openid_client" "frontend" {
 
   standard_flow_enabled         = true
   direct_access_grants_enabled = false
-  implicit_flow_enabled         = false
+  implicit_flow_enabled        = false
 
   valid_redirect_uris = [
     "${var.frontend_url}/*"
