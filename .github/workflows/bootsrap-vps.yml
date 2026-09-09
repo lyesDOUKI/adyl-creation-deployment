@@ -1,4 +1,4 @@
-name: Deploy VPS infrastructure
+name: Bootstrap VPS infrastructure
 
 on:
   workflow_dispatch:
@@ -7,53 +7,29 @@ permissions:
   contents: read
 
 jobs:
-
-  deploy:
-
+  bootstrap:
     runs-on: ubuntu-latest
-
     steps:
-
-      # =====================================================================
-      # Checkout
-      # =====================================================================
-
       - name: Checkout repository
         uses: actions/checkout@v4
-
-
-      # =====================================================================
-      # Ansible
-      # =====================================================================
 
       - name: Install Ansible
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible
 
-
       - name: Install Ansible collections
         run: |
           ansible-galaxy collection install -r ansible/requirements.yml
-
-
-      # =====================================================================
-      # SSH
-      # =====================================================================
 
       - name: Configure SSH
         run: |
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
-          
-          # Écrire la clé privée en préservant exactement le format
           cat > "$HOME/.ssh/deploy_key" << 'EOF'
           ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           EOF
-          
           chmod 600 "$HOME/.ssh/deploy_key"
-          
-          # Créer un fichier de config SSH pour éviter les problèmes
           cat > "$HOME/.ssh/config" << EOF
           Host ${{ vars.VPS_HOST }}
             IdentityFile $HOME/.ssh/deploy_key
@@ -62,24 +38,10 @@ jobs:
             IdentitiesOnly yes
             BatchMode yes
           EOF
-          
           chmod 600 "$HOME/.ssh/config"
 
-
-      # =====================================================================
-      # SSH validation
-      # =====================================================================
-
       - name: Validate SSH access
-        run: |
-          echo "=== Test de connexion SSH ==="
-          ssh ${{ vars.VPS_HOST }} 'whoami'
-          echo "✅ Connexion SSH réussie"
-
-
-      # =====================================================================
-      # Prepare runtime Ansible variables
-      # =====================================================================
+        run: ssh ${{ vars.VPS_HOST }} 'whoami'
 
       - name: Prepare runtime Ansible variables
         env:
@@ -105,7 +67,7 @@ jobs:
           python3 - <<'PY'
           import json
           import os
-          
+
           values = {
               "postgres_user": os.environ.get("POSTGRES_USER", ""),
               "postgres_password": os.environ.get("POSTGRES_PASSWORD", ""),
@@ -126,26 +88,20 @@ jobs:
               "application_env_content": os.environ.get("APPLICATION_ENV_CONTENT", ""),
               "letsencrypt_staging": os.environ.get("LETSENCRYPT_STAGING", "")
           }
-          
+
           with open("ansible/runtime-vars.json", "w", encoding="utf-8") as file:
               json.dump(values, file)
           PY
-          
           chmod 600 ansible/runtime-vars.json
 
-
-      # =====================================================================
-      # Ansible deployment
-      # =====================================================================
-
-      - name: Run Ansible
+      - name: Run Ansible bootstrap
         working-directory: ansible
         env:
           ANSIBLE_HOST_KEY_CHECKING: 'false'
         run: |
           ansible-playbook \
             -i inventory/production.ini \
-            playbook.yml \
+            bootstrap.yml \
             -e "ansible_host=${{ vars.VPS_HOST }}" \
             -e "vps_ipv4=${{ vars.VPS_HOST }}" \
             -e "ansible_user=${{ vars.VPS_USER }}" \
@@ -153,12 +109,6 @@ jobs:
             -e @runtime-vars.json \
             --private-key "$HOME/.ssh/deploy_key"
 
-
-      # =====================================================================
-      # Cleanup
-      # =====================================================================
-
       - name: Remove runtime secrets file
         if: always()
-        run: |
-          rm -f ansible/runtime-vars.json
+        run: rm -f ansible/runtime-vars.json

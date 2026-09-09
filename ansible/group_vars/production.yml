@@ -123,8 +123,12 @@ mailing_enabled: true
 # Update these values when releasing a new version.
 # =========================================================================
 
-frontend_image: "ghcr.io/lyesdouki/adyl-creation-front:latest"
-api_image: "ghcr.io/lyesdouki/adyl-creation-api:latest"
+frontend_image_tag: "latest"
+api_image_tag: "latest"
+
+frontend_image: "ghcr.io/lyesdouki/adyl-creation-front:{{ frontend_image_tag }}"
+api_image: "ghcr.io/lyesdouki/adyl-creation-api:{{ api_image_tag }}"
+target_service: "all"
 
 # =========================================================================
 # GHCR

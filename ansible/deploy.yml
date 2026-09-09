@@ -1,0 +1,51 @@
+---
+- name: Deploy Adyl Creation application
+  hosts: production
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Validate required application secrets
+      ansible.builtin.assert:
+        that:
+          - postgres_user | length > 0
+          - postgres_password | length > 0
+          - keycloak_db_name | length > 0
+          - keycloak_db_user | length > 0
+          - keycloak_db_password | length > 0
+          - keycloak_admin_username | length > 0
+          - keycloak_admin_password | length > 0
+        fail_msg: "One or more required application secrets are missing from GitHub Actions."
+
+    - name: Validate target service
+      ansible.builtin.assert:
+        that:
+          - target_service in ['all', 'api', 'frontend']
+        fail_msg: "target_service must be 'all', 'api', or 'frontend'."
+
+  tasks:
+    - name: Log in to GHCR when enabled
+      community.docker.docker_login:
+        registry_url: "{{ ghcr_registry }}"
+        username: "{{ ghcr_username }}"
+        password: "{{ ghcr_token }}"
+        reauthorize: true
+      when: ghcr_enabled | bool
+      no_log: true
+
+    - name: Deploy application (HTTPS already in place)
+      ansible.builtin.include_role:
+        name: application
+      vars:
+        application_tls_enabled: true
+        application_target_service: "{{ target_service }}"
+
+    - name: Wait for HTTPS endpoint
+      ansible.builtin.uri:
+        url: "https://{{ app_hostname }}"
+        status_code: [200, 301, 302, 404, 502]
+        validate_certs: true
+      register: https_endpoint_check
+      retries: 12
+      delay: 5
+      until: https_endpoint_check is succeeded

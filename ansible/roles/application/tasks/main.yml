@@ -59,19 +59,45 @@
   changed_when: false
   no_log: true
 
-- name: Pull application images
+# ---------------------------------------------------------------------------
+# Full stack pull/up (bootstrap, or explicit target_service == 'all')
+# ---------------------------------------------------------------------------
+
+- name: Pull application images (full stack)
   ansible.builtin.command:
     cmd: docker compose pull
     chdir: "{{ docker_directory }}"
   register: compose_pull
   changed_when: true
+  when: application_target_service is not defined or application_target_service == 'all'
 
-- name: Start application stack
+- name: Start application stack (full stack)
   ansible.builtin.command:
     cmd: docker compose up -d --remove-orphans
     chdir: "{{ docker_directory }}"
   register: compose_up
   changed_when: true
+  when: application_target_service is not defined or application_target_service == 'all'
+
+# ---------------------------------------------------------------------------
+# Targeted service pull/up (deploy.yml with target_service == 'api' or 'frontend')
+# ---------------------------------------------------------------------------
+
+- name: Pull targeted service image
+  ansible.builtin.command:
+    cmd: "docker compose pull {{ application_target_service }}"
+    chdir: "{{ docker_directory }}"
+  register: compose_pull_targeted
+  changed_when: true
+  when: application_target_service is defined and application_target_service != 'all'
+
+- name: Recreate targeted service
+  ansible.builtin.command:
+    cmd: "docker compose up -d --no-deps {{ application_target_service }}"
+    chdir: "{{ docker_directory }}"
+  register: compose_up_targeted
+  changed_when: true
+  when: application_target_service is defined and application_target_service != 'all'
 
 - name: Wait for reverse proxy
   ansible.builtin.uri:
