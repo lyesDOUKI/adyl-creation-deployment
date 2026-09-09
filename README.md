@@ -1,212 +1,297 @@
 # Adyl Creation — Deployment
 
-Repository d'orchestration Docker pour la stack **Adyl Creation** : reverse proxy, frontend, API, PostgreSQL et Keycloak.
+Repository d'orchestration de l'infrastructure Docker pour Adyl Creation.
 
-Il ne contient **aucun code applicatif**.
+Il ne contient aucun code applicatif. Il automatise le bootstrap et le déploiement du VPS avec Ansible, ainsi que l'exécution de la stack Docker Compose avec Nginx, frontend, API, PostgreSQL et Keycloak.
 
 ## Architecture
 
-```text
-Internet / navigateur
+    Internet
         │
         ▼
-reverse-proxy (nginx)
-├── /       → frontend
-├── /api/   → api
-└── auth.*  → keycloak
-
+    Nginx
         │
-        ▼
-┌─────────────────────────────────────┐
-│               proxy                 │
-│  Réseau public                      │
-│  reverse-proxy, frontend, api,      │
-│  keycloak                            │
-└────────────────┬────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────┐
-│                data                 │
-│  Réseau interne                     │
-│  api, postgres, keycloak,            │
-│  keycloak-db                         │
-└─────────────────────────────────────┘
-```
+        ├── adyl.<IP>.sslip.io
+        │     ├── /        → frontend
+        │     └── /api/    → API
+        │
+        ├── api.<IP>.sslip.io
+        │     └── /        → API
+        │
+        ├── auth.<IP>.sslip.io
+        │     └── OIDC public du realm adyl-creation
+        │
+        └── admin-auth.<IP>.sslip.io
+              └── Keycloak Console + Admin API
+                    │
+                    └── accessible uniquement depuis l'IP autorisée
 
-### Isolation réseau
+## Isolation réseau Docker
 
-* **postgres** et **keycloak-db** sont uniquement connectés au réseau `data`.
-* Le **frontend** et le **reverse-proxy** n'ont aucun accès direct aux bases de données.
-* Le réseau `proxy` permet uniquement les communications nécessaires entre le reverse proxy et les services exposés.
+    proxy
+      ├── reverse-proxy
+      ├── frontend
+      ├── api
+      └── keycloak
 
-## Prérequis
+    data
+      ├── api
+      ├── postgres
+      ├── keycloak
+      └── keycloak-db
 
-* Docker avec le plugin Compose
-* Accès aux images privées :
+PostgreSQL et la base PostgreSQL de Keycloak ne publient aucun port sur l'hôte.
 
-```bash
-docker login ghcr.io
-```
+Le reverse proxy est le seul composant exposé sur les ports HTTP et HTTPS.
 
-* [mkcert](https://github.com/FiloSottile/mkcert) ou une CA locale pour générer les certificats SSL de développement
+## Domaines
 
+Avec un VPS dont l'adresse IPv4 est 203.0.113.50 :
 
-## Mise en route
+    Frontend :          https://adyl.203.0.113.50.sslip.io
+    API :               https://api.203.0.113.50.sslip.io
+    Keycloak public :   https://auth.203.0.113.50.sslip.io
+    Keycloak admin :    https://admin-auth.203.0.113.50.sslip.io
 
-### Configuration
+sslip.io résout automatiquement ces noms vers l'adresse IPv4 contenue dans le hostname.
 
-Copier le fichier d'environnement :
+## Sécurisation de Keycloak
 
-```bash
-cp .env.example .env
-```
+Keycloak est séparé en deux surfaces :
 
-Puis renseigner dans `.env` :
+### Surface publique
 
-* les domaines utilisés ;
-* les versions des images ;
-* les identifiants ;
-* les paramètres de base de données ;
-* les paramètres de healthcheck.
+    https://auth.<IP>.sslip.io
 
-### Hosts locaux
+Cette URL est utilisée par le frontend et le backend pour l'authentification OIDC.
 
-Ajouter les domaines à `/etc/hosts` :
+Le realm master et l'interface d'administration sont bloqués sur ce hostname.
 
-```text
-127.0.0.1 adyl-creation.local
-127.0.0.1 auth.adyl-creation.local
-```
+### Surface d'administration
 
-### Certificats TLS
+    https://admin-auth.<IP>.sslip.io
 
-Générer les certificats HTTPS avec `mkcert` et les placer dans :
+Cette URL sert à :
 
-```text
-nginx/ssl/
-```
+    - la console Keycloak ;
+    - l'Admin REST API ;
+    - Terraform.
 
-Placer également la CA correspondante dans :
+Nginx autorise uniquement l'adresse IP définie par :
 
-```text
-certificates/rootCA.pem
-```
+    keycloak_admin_allowed_ip
 
-Cette CA est utilisée pour configurer le **truststore Java de l'API**.
+dans :
 
-### Déploiement
+    ansible/group_vars/production.yml
 
-```bash
-./deploy.sh
-```
+La valeur initiale est volontairement :
 
-## Commandes utiles
+    CHANGE_ME_YOUR_IP
 
-Vérifier l'état de la stack :
+Il faut la remplacer par l'adresse IPv4 publique du PC depuis lequel Terraform et la console Keycloak seront utilisés.
 
-```bash
-docker compose ps
-```
+Le playbook refuse de déployer tant que cette valeur n'a pas été remplacée.
 
-Afficher les logs d'un service :
+Le challenge ACME de Let's Encrypt reste accessible publiquement sur le hostname d'administration afin de permettre l'émission et le renouvellement du certificat.
 
-```bash
-docker compose logs -f api
-```
+## Terraform Keycloak
 
-Arrêter la stack en conservant les données :
+Terraform est exécuté localement depuis le PC d'administration.
 
-```bash
-docker compose down
-```
+Il utilise :
 
-Arrêter la stack et supprimer les volumes :
+    https://admin-auth.<IP>.sslip.io
 
-```bash
-docker compose down -v
-```
+pour accéder à l'Admin API.
 
-> `docker compose down -v` supprime les volumes Docker associés à la stack et doit donc être utilisé uniquement pour un reset complet.
+Les applications utilisent séparément :
 
-## URLs de test
+    https://auth.<IP>.sslip.io
 
-**Frontend**
+pour les endpoints OIDC publics.
 
-```text
-https://adyl-creation.local/
-```
+Le fichier :
 
-**API**
+    terraform/keycloak/terraform.tfvars
 
-```text
-https://adyl-creation.local/api/products
-```
+contient les valeurs locales et les secrets. Il est ignoré par Git.
 
-**Keycloak**
+Le fichier :
 
-```text
-https://auth.adyl-creation.local/
-```
+    terraform/keycloak/terraform.tfvars.example
 
-## Configuration `.env`
+sert de modèle.
 
-| Variable            | Description                      |
-| ------------------- | -------------------------------- |
-| `HTTP_PORT`         | Port exposé par le reverse proxy |
-| `APP_HOSTNAME`      | Domaine de l'application         |
-| `KEYCLOAK_HOSTNAME` | Domaine de Keycloak              |
-| `FRONTEND_IMAGE`    | Image frontend avec tag figé     |
-| `API_IMAGE`         | Image API avec tag figé          |
-| `POSTGRES_VERSION`  | Version de PostgreSQL            |
-| `KEYCLOAK_VERSION`  | Version de Keycloak              |
-| `POSTGRES_*`        | Configuration PostgreSQL         |
-| `KEYCLOAK_*`        | Configuration Keycloak           |
-| `*_HEALTHCHECK_*`   | Configuration des healthchecks   |
+Le state Terraform reste local dans :
 
-## Rollback
+    terraform/keycloak/terraform.tfstate
 
-Les images utilisées sont versionnées avec des tags immuables.
+Le state doit rester privé car il peut contenir des informations sensibles.
 
-Pour revenir à une version précédente, modifier simplement les tags dans `.env` :
+## Keycloak
 
-```text
-FRONTEND_IMAGE=...
-API_IMAGE=...
-```
+Terraform configure :
 
-Puis redéployer :
+    master
+    └── admin
+        └── compte utilisé par Terraform
 
-```bash
-docker compose pull
-docker compose up -d
-```
+    adyl-creation
+    ├── ADMIN
+    ├── admin
+    │   └── ADMIN
+    ├── adyl-creation-api
+    ├── adyl-creation-front
+    └── adyl-creation-api client scope
 
-## Sécurité
+Le mot de passe de l'administrateur du realm master est fourni au déploiement via GitHub Actions.
 
-### Exposition PostgreSQL
+Le mot de passe de l'utilisateur applicatif est fourni localement à Terraform.
 
-Le port `5433` de PostgreSQL est temporairement exposé afin de permettre les connexions depuis un client local comme **DBeaver** ou **SQL Developer**.
+## TLS / Let's Encrypt
 
-Cette exposition est uniquement destinée au développement local.
+Le rôle Ansible tls :
 
-**Le port doit impérativement être supprimé du Compose avant tout déploiement en production ou sur un environnement partagé.**
+    1. prépare le webroot ACME ;
+    2. vérifie que le challenge est publiquement accessible ;
+    3. demande le certificat Let's Encrypt si nécessaire ;
+    4. installe le deploy hook Certbot ;
+    5. recharge le reverse proxy lors d'un renouvellement.
 
-### Frontend en lecture seule
+Le certificat couvre :
 
-Le conteneur frontend s'exécute avec :
+    adyl.<IP>.sslip.io
+    api.<IP>.sslip.io
+    auth.<IP>.sslip.io
+    admin-auth.<IP>.sslip.io
 
-```yaml
-read_only: true
-```
+Il n'y a pas de dry-run automatique lors du renouvellement.
 
-Cela limite les possibilités d'écriture du conteneur en cas de compromission.
+Pour tester l'émission d'un certificat sans consommer les limites de production de Let's Encrypt, utiliser l'option de staging prévue par la configuration.
 
-### Keycloak derrière le reverse proxy
+Attention : détruire et recréer fréquemment une machine avec les mêmes domaines peut rencontrer les rate limits de Let's Encrypt. Cela vient du service Let's Encrypt et ne peut pas être garanti par Ansible.
 
-Keycloak utilise :
+## Déploiement
 
-```text
---proxy-headers=xforwarded
-```
+Le déploiement est déclenché manuellement depuis GitHub Actions.
 
-afin de prendre correctement en compte les en-têtes transmis par le reverse proxy et de générer les URLs HTTPS attendues.
+La pipeline :
+
+    1. installe Ansible ;
+    2. installe les collections nécessaires ;
+    3. configure l'accès SSH ;
+    4. injecte les secrets GitHub dans des variables runtime temporaires ;
+    5. exécute le playbook Ansible ;
+    6. supprime le fichier temporaire contenant les secrets.
+
+Ansible est la source de vérité pour la configuration du VPS.
+
+## Premier déploiement
+
+Avant de lancer la pipeline, remplacer dans :
+
+    ansible/group_vars/production.yml
+
+la valeur :
+
+    keycloak_admin_allowed_ip: "CHANGE_ME_YOUR_IP"
+
+par l'adresse IPv4 publique du PC d'administration.
+
+Exemple :
+
+    keycloak_admin_allowed_ip: "203.0.113.25"
+
+Après le déploiement, vérifier :
+
+    https://adyl.<IP>.sslip.io
+    https://auth.<IP>.sslip.io
+    https://admin-auth.<IP>.sslip.io
+
+Puis lancer Terraform depuis :
+
+    terraform/keycloak
+
+avec un terraform.tfvars configuré selon terraform.tfvars.example.
+
+Le provider Terraform doit utiliser le hostname d'administration.
+
+## Commandes Terraform
+
+Depuis terraform/keycloak :
+
+    terraform init
+    terraform fmt
+    terraform validate
+    terraform plan
+    terraform apply
+
+## Commandes Docker utiles
+
+Sur le VPS :
+
+    cd /opt/adyl-creation/docker
+
+    docker compose ps
+
+    docker compose logs -f api
+
+    docker compose logs -f keycloak
+
+    docker compose down
+
+Pour supprimer également les données persistantes :
+
+    docker compose down -v
+
+Cette dernière commande supprime les bases PostgreSQL et les autres volumes de la stack.
+
+## Sécurité du VPS
+
+Le rôle security :
+
+    - désactive la connexion SSH root ;
+    - désactive l'authentification SSH par mot de passe ;
+    - autorise uniquement la clé SSH ;
+    - limite les utilisateurs SSH au deploy_user ;
+    - active UFW ;
+    - n'autorise que SSH, HTTP et HTTPS ;
+    - active fail2ban pour SSH.
+
+Le rôle Docker installe Docker Engine et le plugin Docker Compose.
+
+Le rôle common installe les dépendances système et prépare les répertoires de déploiement.
+
+## Idempotence et reconstruction
+
+Le serveur ne doit pas contenir de configuration manuelle nécessaire au fonctionnement de la stack.
+
+Après destruction du VPS, le même code Ansible peut reconstruire :
+
+    - les paquets système ;
+    - Docker ;
+    - les règles UFW ;
+    - fail2ban ;
+    - la configuration SSH ;
+    - les répertoires ;
+    - Nginx ;
+    - PostgreSQL ;
+    - Keycloak ;
+    - les certificats TLS ;
+    - la stack Docker.
+
+Les données persistantes sont volontairement stockées dans des volumes Docker. Leur conservation dépend donc de la conservation du serveur ou d'une stratégie de sauvegarde externe.
+
+## Images applicatives
+
+Les images sont configurées dans :
+
+    ansible/group_vars/production.yml
+
+Exemple :
+
+    ghcr.io/lyesdouki/adyl-creation-front:latest
+    ghcr.io/lyesdouki/adyl-creation-api:latest
+
+En production, il est recommandé d'utiliser des tags immuables ou des digests afin d'éviter qu'un redéploiement récupère une image différente sous le même tag.

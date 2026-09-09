@@ -187,6 +187,7 @@ services:
       - start
       - --http-enabled=true
       - --hostname=${KEYCLOAK_HOSTNAME}
+      - --hostname-admin=${KEYCLOAK_ADMIN_HOSTNAME}
       - --health-enabled=true
       - --proxy-headers=xforwarded
 

@@ -24,5 +24,5 @@ output "keycloak_admin_username" {
 
 output "keycloak_issuer_url" {
   description = "OIDC issuer URL for the application realm"
-  value       = "${var.keycloak_url}/realms/${keycloak_realm.adyl_creation.realm}"
+  value       = "${var.keycloak_public_url}/realms/${keycloak_realm.adyl_creation.realm}"
 }

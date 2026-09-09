@@ -17,7 +17,7 @@
 
 - name: Create ACME challenge test file
   ansible.builtin.copy:
-    dest: "{{ certbot_webroot }}/.well-known/acme-challenge/adyl-creation-healthcheck"
+    dest: "{{ certbot_webroot }}/.well-known/acme-challenge/adyl-healthcheck"
     content: "adyl-creation-letsencrypt-ready\n"
     owner: "{{ deploy_user }}"
     group: "{{ deploy_user }}"
@@ -25,7 +25,7 @@
 
 - name: Verify ACME challenge file is publicly served
   ansible.builtin.uri:
-    url: "http://{{ item }}/.well-known/acme-challenge/adyl-creation-healthcheck"
+    url: "http://{{ item }}/.well-known/acme-challenge/adyl-healthcheck"
     status_code: 200
     return_content: true
   loop: "{{ letsencrypt_domains }}"
@@ -35,12 +35,7 @@
   until:
     - acme_public_checks is succeeded
 
-- name: Check whether Let's Encrypt certificate exists
-  ansible.builtin.stat:
-    path: "/etc/letsencrypt/live/{{ letsencrypt_certificate_name }}/fullchain.pem"
-  register: letsencrypt_certificate
-
-- name: Request Let's Encrypt certificate
+- name: Obtain or update Let's Encrypt certificate
   ansible.builtin.command:
     cmd: >-
       certbot certonly
@@ -50,11 +45,10 @@
       --agree-tos
       --email {{ letsencrypt_email }}
       --cert-name {{ letsencrypt_certificate_name }}
+      --keep-until-expiring
+      --renew-with-new-domains
       {{ '--staging' if letsencrypt_staging | default(false) | bool else '' }}
-      -d {{ letsencrypt_domains[0] }}
-      -d {{ letsencrypt_domains[1] }}
-      -d {{ letsencrypt_domains[2] }}
-  when: not letsencrypt_certificate.stat.exists
+      {{ letsencrypt_domains | map('regex_replace', '^', '-d ') | join(' ') }}
   register: certbot_request
   changed_when: true
 
@@ -68,5 +62,5 @@
 
 - name: Remove ACME challenge test file
   ansible.builtin.file:
-    path: "{{ certbot_webroot }}/.well-known/acme-challenge/adyl-creation-healthcheck"
+    path: "{{ certbot_webroot }}/.well-known/acme-challenge/adyl-healthcheck"
     state: absent

@@ -13,9 +13,10 @@ certbot_webroot: "{{ app_root }}/certbot/www"
 # sslip.io derives DNS records from the VPS public IPv4 address.
 #
 # Example for 203.0.113.50:
-#   Frontend:  adyl-creation.203.0.113.50.sslip.io
-#   API:       api.203.0.113.50.sslip.io
-#   Keycloak:  auth.203.0.113.50.sslip.io
+#   Frontend:      adyl.203.0.113.50.sslip.io
+#   API:           api.203.0.113.50.sslip.io
+#   Keycloak:      auth.203.0.113.50.sslip.io
+#   Admin:         admin-auth.203.0.113.50.sslip.io
 #
 # VPS_HOST is passed by GitHub Actions as vps_ipv4.
 # =========================================================================
@@ -25,6 +26,14 @@ sslip_domain_suffix: "{{ vps_ipv4 }}.sslip.io"
 app_hostname: "adyl.{{ sslip_domain_suffix }}"
 api_hostname: "api.{{ sslip_domain_suffix }}"
 keycloak_hostname: "auth.{{ sslip_domain_suffix }}"
+keycloak_admin_hostname: "admin-auth.{{ sslip_domain_suffix }}"
+
+keycloak_hostname_url: "https://{{ keycloak_hostname }}"
+keycloak_admin_hostname_url: "https://{{ keycloak_admin_hostname }}"
+
+# Public IPv4 address allowed to access the Keycloak administration hostname.
+# Replace this placeholder before running the deployment.
+keycloak_admin_allowed_ip: "86.228.129.145"
 
 # =========================================================================
 # Reverse proxy
@@ -181,3 +190,4 @@ letsencrypt_domains:
   - "{{ app_hostname }}"
   - "{{ api_hostname }}"
   - "{{ keycloak_hostname }}"
+  - "{{ keycloak_admin_hostname }}"

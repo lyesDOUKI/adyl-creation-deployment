@@ -43,6 +43,19 @@ server {
     }
 }
 
+server {
+    listen 80;
+    server_name {{ keycloak_admin_hostname }};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
 
 # =========================================================================
 # HTTPS - Frontend
@@ -60,6 +73,16 @@ server {
 
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
+    location /api/ {
+        proxy_pass http://api:8084;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location / {
         proxy_pass http://frontend:80;
         proxy_http_version 1.1;
@@ -67,17 +90,8 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
-        location /api/ {
-            proxy_pass http://api:8084;
-            proxy_http_version 1.1;
-
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
 }
 
 
@@ -104,14 +118,16 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 
 
 # =========================================================================
-# HTTPS - Keycloak
+# HTTPS - Keycloak public OIDC
 # =========================================================================
+# The public hostname serves the application realm. Administration and the
+# master realm are deliberately unavailable from this hostname.
 
 server {
     listen 443 ssl;
@@ -125,6 +141,22 @@ server {
 
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
+    location = /admin {
+        return 404;
+    }
+
+    location ^~ /admin/ {
+        return 404;
+    }
+
+    location = /realms/master {
+        return 404;
+    }
+
+    location ^~ /realms/master/ {
+        return 404;
+    }
+
     location / {
         proxy_pass http://keycloak:8080;
         proxy_http_version 1.1;
@@ -132,7 +164,48 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port 443;
+    }
+}
+
+
+# =========================================================================
+# HTTPS - Keycloak administration
+# =========================================================================
+# Only the configured IP can access the administration interface.
+# The ACME challenge remains public for certificate issuance and renewal.
+
+server {
+    listen 443 ssl;
+    server_name {{ keycloak_admin_hostname }};
+
+    ssl_certificate /etc/letsencrypt/live/{{ letsencrypt_certificate_name }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ letsencrypt_certificate_name }}/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        allow {{ keycloak_admin_allowed_ip }};
+        deny all;
+
+        proxy_pass http://keycloak:8080;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port 443;
     }
 }
 
@@ -187,7 +260,7 @@ server {
 
 
 # =========================================================================
-# HTTP - Keycloak
+# HTTP - Keycloak public OIDC
 # =========================================================================
 
 server {
@@ -198,7 +271,50 @@ server {
         root /var/www/certbot;
     }
 
+    location = /admin {
+        return 404;
+    }
+
+    location ^~ /admin/ {
+        return 404;
+    }
+
+    location = /realms/master {
+        return 404;
+    }
+
+    location ^~ /realms/master/ {
+        return 404;
+    }
+
     location / {
+        proxy_pass http://keycloak:8080;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+
+# =========================================================================
+# HTTP - Keycloak administration
+# =========================================================================
+
+server {
+    listen 80;
+    server_name {{ keycloak_admin_hostname }};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        allow {{ keycloak_admin_allowed_ip }};
+        deny all;
+
         proxy_pass http://keycloak:8080;
         proxy_http_version 1.1;
 

@@ -3,7 +3,7 @@
 # =========================================================================
 
 variable "keycloak_url" {
-  description = "Base URL of the Keycloak server"
+  description = "Keycloak administration URL used by Terraform"
   type        = string
 
   validation {
@@ -28,6 +28,17 @@ variable "keycloak_client_id" {
   description = "Keycloak client ID used by Terraform"
   type        = string
   default     = "admin-cli"
+}
+
+
+variable "keycloak_public_url" {
+  description = "Public Keycloak URL used by applications and OIDC clients"
+  type        = string
+
+  validation {
+    condition     = can(regex("^https://", var.keycloak_public_url))
+    error_message = "keycloak_public_url must use HTTPS."
+  }
 }
 
 

@@ -5,3 +5,5 @@
 *.p12
 *.pem
 .idea/
+# CI runtime secrets
+ansible/runtime-vars.json
