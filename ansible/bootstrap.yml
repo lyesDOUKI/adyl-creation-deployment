@@ -26,6 +26,7 @@
           - app_hostname == 'adyl.' ~ vps_ipv4 ~ '.sslip.io'
           - api_hostname == 'api.' ~ vps_ipv4 ~ '.sslip.io'
           - keycloak_hostname == 'auth.' ~ vps_ipv4 ~ '.sslip.io'
+          - netdata_hostname == 'netdata.' ~ vps_ipv4 ~ '.sslip.io'
         fail_msg: "The sslip.io hostnames do not match vps_ipv4."
 
     - name: Validate Keycloak administration IP
@@ -48,6 +49,15 @@
           - keycloak_admin_password | length > 0
         fail_msg: "One or more required application secrets are missing from GitHub Actions."
 
+    - name: Validate required monitoring secrets
+      ansible.builtin.assert:
+        that:
+          - netdata_basic_auth_user is defined
+          - netdata_basic_auth_user | length > 0
+          - netdata_basic_auth_password is defined
+          - netdata_basic_auth_password | length > 0
+        fail_msg: "One or more required monitoring secrets are missing from GitHub Actions."
+
   tasks:
     - name: Run common role
       ansible.builtin.include_role:
@@ -69,6 +79,11 @@
         reauthorize: true
       when: ghcr_enabled | bool
       no_log: true
+
+    - name: Prepare monitoring (htpasswd + scrape config)
+      ansible.builtin.include_role:
+        name: monitoring
+        tasks_from: prepare.yml
 
     - name: Deploy application in HTTP-only bootstrap mode
       ansible.builtin.include_role:
@@ -113,3 +128,8 @@
       delay: 5
       until: https_endpoint_check is succeeded
       when: letsencrypt_staging | bool == false
+
+    - name: Configure monitoring (Prometheus scrape target inside Netdata)
+      ansible.builtin.include_role:
+        name: monitoring
+        tasks_from: configure.yml

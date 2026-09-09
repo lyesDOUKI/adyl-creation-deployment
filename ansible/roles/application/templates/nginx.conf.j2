@@ -56,6 +56,19 @@ server {
     }
 }
 
+server {
+    listen 80;
+    server_name {{ netdata_hostname }};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
 
 # =========================================================================
 # HTTPS - Frontend
@@ -209,6 +222,40 @@ server {
     }
 }
 
+
+# =========================================================================
+# HTTPS - Netdata (monitoring)
+# =========================================================================
+# Protected by HTTP basic auth. Access should also be restricted further
+# via firewall/IP allowlist if you want defense in depth, same spirit as
+# the Keycloak administration console.
+
+server {
+    listen 443 ssl;
+    server_name {{ netdata_hostname }};
+
+    ssl_certificate /etc/letsencrypt/live/{{ letsencrypt_certificate_name }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ letsencrypt_certificate_name }}/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    auth_basic "Restricted";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    location / {
+        proxy_pass http://netdata:19999;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
 {% else %}
 
 # =========================================================================
@@ -316,6 +363,33 @@ server {
         deny all;
 
         proxy_pass http://keycloak:8080;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+
+# =========================================================================
+# HTTP - Netdata (monitoring)
+# =========================================================================
+
+server {
+    listen 80;
+    server_name {{ netdata_hostname }};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        auth_basic "Restricted";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+
+        proxy_pass http://netdata:19999;
         proxy_http_version 1.1;
 
         proxy_set_header Host $host;

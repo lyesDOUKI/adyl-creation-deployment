@@ -190,8 +190,12 @@ letsencrypt_email: "CHANGE_ME"
 letsencrypt_staging: ""
 letsencrypt_certificate_name: "adyl-creation.{{ sslip_domain_suffix }}"
 
+netdata_hostname: "netdata.{{ vps_ipv4 }}.sslip.io"
+backend_management_port: 9404
+
 letsencrypt_domains:
   - "{{ app_hostname }}"
   - "{{ api_hostname }}"
   - "{{ keycloak_hostname }}"
   - "{{ keycloak_admin_hostname }}"
+  - "{{ netdata_hostname }}"

@@ -1,0 +1,26 @@
+---
+- name: Check if Netdata container is running
+  ansible.builtin.command:
+    cmd: docker inspect -f '{{ '{{' }}.State.Running{{ '}}' }}' adyl-creation-netdata
+  register: netdata_running
+  changed_when: false
+  failed_when: false
+
+- name: Copy Prometheus scrape config into Netdata container
+  ansible.builtin.command:
+    cmd: docker cp {{ docker_directory }}/monitoring/prometheus.conf adyl-creation-netdata:/etc/netdata/go.d/prometheus.conf
+  when:
+    - netdata_running.stdout == "true"
+    - monitoring_scrape_config is defined
+    - monitoring_scrape_config is changed
+  changed_when: true
+
+- name: Restart Netdata to apply scrape config
+  ansible.builtin.command:
+    cmd: docker compose restart netdata
+    chdir: "{{ docker_directory }}"
+  when:
+    - netdata_running.stdout == "true"
+    - monitoring_scrape_config is defined
+    - monitoring_scrape_config is changed
+  changed_when: true

@@ -1,0 +1,27 @@
+---
+- name: Ensure nginx directory exists
+  ansible.builtin.file:
+    path: "{{ docker_directory }}/nginx"
+    state: directory
+    mode: '0755'
+
+- name: Generate htpasswd file for Netdata basic auth
+  community.general.htpasswd:
+    path: "{{ docker_directory }}/nginx/.htpasswd"
+    name: "{{ netdata_basic_auth_user }}"
+    password: "{{ netdata_basic_auth_password }}"
+    owner: root
+    mode: '0644'
+
+- name: Ensure monitoring config directory exists
+  ansible.builtin.file:
+    path: "{{ docker_directory }}/monitoring"
+    state: directory
+    mode: '0755'
+
+- name: Render Netdata go.d Prometheus scrape config
+  ansible.builtin.template:
+    src: prometheus.conf.j2
+    dest: "{{ docker_directory }}/monitoring/prometheus.conf"
+    mode: '0644'
+  register: monitoring_scrape_config

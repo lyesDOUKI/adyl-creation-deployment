@@ -17,6 +17,7 @@ services:
 
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
       - {{ certbot_webroot }}:/var/www/certbot:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
 
@@ -29,6 +30,9 @@ services:
 
       keycloak:
         condition: service_healthy
+
+      netdata:
+        condition: service_started
 
     networks:
       - proxy
@@ -223,6 +227,43 @@ services:
       - data
 
 
+  # =========================================================================
+  # Netdata (monitoring)
+  # =========================================================================
+
+  netdata:
+    image: netdata/netdata:latest
+
+    container_name: adyl-creation-netdata
+
+    restart: unless-stopped
+
+    hostname: adyl-creation
+
+    cap_add:
+      - SYS_PTRACE
+      - SYS_ADMIN
+
+    security_opt:
+      - apparmor:unconfined
+
+    volumes:
+      - netdata_config:/etc/netdata
+      - netdata_lib:/var/lib/netdata
+      - netdata_cache:/var/cache/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    # No "ports": reached only through reverse-proxy, on the internal network
+
+    networks:
+      - proxy
+
+
 # ===========================================================================
 # Volumes
 # ===========================================================================
@@ -234,6 +275,12 @@ volumes:
   keycloak_db_data:
 
   api_photos:
+
+  netdata_config:
+
+  netdata_lib:
+
+  netdata_cache:
 
 
 # ===========================================================================

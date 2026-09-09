@@ -63,6 +63,8 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           APPLICATION_ENV_CONTENT: ${{ secrets.APPLICATION_ENV_CONTENT }}
           LETSENCRYPT_STAGING: ${{ secrets.LETSENCRYPT_STAGING }}
+          NETDATA_BASIC_AUTH_USER: ${{ secrets.NETDATA_BASIC_AUTH_USER }}
+          NETDATA_BASIC_AUTH_PASSWORD: ${{ secrets.NETDATA_BASIC_AUTH_PASSWORD }}
         run: |
           python3 - <<'PY'
           import json
@@ -86,7 +88,9 @@ jobs:
               "ghcr_username": os.environ.get("GHCR_USERNAME", ""),
               "ghcr_token": os.environ.get("GHCR_TOKEN", ""),
               "application_env_content": os.environ.get("APPLICATION_ENV_CONTENT", ""),
-              "letsencrypt_staging": os.environ.get("LETSENCRYPT_STAGING", "")
+              "letsencrypt_staging": os.environ.get("LETSENCRYPT_STAGING", ""),
+              "netdata_basic_auth_user": os.environ.get("NETDATA_BASIC_AUTH_USER", ""),
+              "netdata_basic_auth_password": os.environ.get("NETDATA_BASIC_AUTH_PASSWORD", "")
           }
 
           with open("ansible/runtime-vars.json", "w", encoding="utf-8") as file:
