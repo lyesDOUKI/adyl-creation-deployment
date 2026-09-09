@@ -1,47 +1,50 @@
 ---
-- name: Create Nginx configuration directory
-  ansible.builtin.file:
-    path: "{{ docker_directory }}/nginx"
-    state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
-    mode: "0755"
+- name: Render and deploy full infrastructure configuration
+  when: application_target_service is not defined or application_target_service == 'all'
+  block:
+    - name: Create Nginx configuration directory
+      ansible.builtin.file:
+        path: "{{ docker_directory }}/nginx"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0755"
 
-- name: Deploy Nginx configuration
-  ansible.builtin.template:
-    src: nginx.conf.j2
-    dest: "{{ docker_directory }}/nginx/nginx.conf"
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
-    mode: "0644"
+    - name: Deploy Nginx configuration
+      ansible.builtin.template:
+        src: nginx.conf.j2
+        dest: "{{ docker_directory }}/nginx/nginx.conf"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
 
-- name: Deploy Docker Compose
-  ansible.builtin.template:
-    src: docker-compose.yml.j2
-    dest: "{{ docker_directory }}/docker-compose.yml"
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
-    mode: "0644"
+    - name: Deploy Docker Compose
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ docker_directory }}/docker-compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0644"
 
-- name: Create API certificates directory when truststore is enabled
-  ansible.builtin.file:
-    path: "{{ docker_directory }}/certificates"
-    state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
-    mode: "0750"
-  when: api_truststore_enabled | bool
+    - name: Create API certificates directory when truststore is enabled
+      ansible.builtin.file:
+        path: "{{ docker_directory }}/certificates"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0750"
+      when: api_truststore_enabled | bool
 
-- name: Copy API Java truststore
-  ansible.builtin.copy:
-    src: "{{ api_truststore_source }}"
-    dest: "{{ docker_directory }}/certificates/java-truststore.p12"
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
-    mode: "0600"
-  when:
-    - api_truststore_enabled | bool
-    - api_truststore_source | length > 0
+    - name: Copy API Java truststore
+      ansible.builtin.copy:
+        src: "{{ api_truststore_source }}"
+        dest: "{{ docker_directory }}/certificates/java-truststore.p12"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0600"
+      when:
+        - api_truststore_enabled | bool
+        - api_truststore_source | length > 0
 
 - name: Deploy application environment
   ansible.builtin.template:
