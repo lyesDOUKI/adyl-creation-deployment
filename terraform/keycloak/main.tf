@@ -37,7 +37,20 @@ resource "keycloak_role" "admin" {
   description = "Administrator role for Adyl Creation"
 }
 
+resource "keycloak_role" "user" {
+  realm_id = keycloak_realm.adyl_creation.id
+  name     = "USER"
 
+  description = "Default role for registered users"
+}
+
+resource "keycloak_default_roles" "adyl_creation" {
+  realm_id = keycloak_realm.adyl_creation.id
+
+  default_roles = [
+    keycloak_role.user.name
+  ]
+}
 # =========================================================================
 # API CLIENT SCOPE
 # =========================================================================
