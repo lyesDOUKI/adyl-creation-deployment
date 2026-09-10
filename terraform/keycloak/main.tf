@@ -147,10 +147,36 @@ resource "keycloak_openid_client_default_scopes" "frontend" {
   client_id = keycloak_openid_client.frontend.id
 
   default_scopes = [
+    "basic",
+    "openid",
     "profile",
     "email",
     "roles",
     "web-origins",
     keycloak_openid_client_scope.api.name
   ]
+}
+
+# =========================================================================
+# API PHONE ATTRIBUTE MAPPER
+# =========================================================================
+# Exposes the user's phone attribute in the access token as "phone".
+# =========================================================================
+
+resource "keycloak_generic_protocol_mapper" "api_phone" {
+  realm_id        = keycloak_realm.adyl_creation.id
+  client_scope_id = keycloak_openid_client_scope.api.id
+
+  name            = "phone"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"      = "phone"
+    "claim.name"          = "phone"
+    "jsonType.label"      = "String"
+    "access.token.claim"  = "true"
+    "id.token.claim"      = "false"
+    "userinfo.token.claim" = "false"
+  }
 }
