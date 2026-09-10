@@ -127,11 +127,13 @@ resource "keycloak_openid_client" "frontend" {
   implicit_flow_enabled        = false
 
   valid_redirect_uris = [
-    "${var.frontend_url}/*"
+    "${var.frontend_url}/*",
+    "${var.scalar_url}/*"
   ]
 
   web_origins = [
-    var.frontend_url
+    var.frontend_url,
+    var.scalar_url
   ]
 }
 

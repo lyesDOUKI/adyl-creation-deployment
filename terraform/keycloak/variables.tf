@@ -67,6 +67,15 @@ variable "frontend_url" {
   }
 }
 
+variable "scalar_url" {
+  description = "Public URL of the scalar application"
+  type        = string
+
+  validation {
+    condition     = can(regex("^https://", var.scalar_url))
+    error_message = "scalar_url must use HTTPS."
+  }
+}
 
 # =========================================================================
 # ADMIN USER
