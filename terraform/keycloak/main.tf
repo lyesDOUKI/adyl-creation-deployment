@@ -23,6 +23,60 @@ resource "keycloak_realm" "adyl_creation" {
 
     default_locale = "fr"
   }
+
+  # -----------------------------------------------------------------------
+  # SMTP (email) configuration
+  # -----------------------------------------------------------------------
+  # Used for VERIFY_EMAIL / UPDATE_EMAIL required actions, password reset,
+  # and other realm email notifications.
+  # -----------------------------------------------------------------------
+
+  smtp_server {
+    host = var.smtp_host
+    port = var.smtp_port
+
+    from              = var.smtp_from
+    from_display_name = var.smtp_from_display_name
+
+    reply_to              = var.smtp_reply_to
+    reply_to_display_name = var.smtp_from_display_name
+
+    ssl       = var.smtp_ssl
+    starttls  = var.smtp_starttls
+
+    dynamic "auth" {
+      for_each = var.smtp_auth_enabled ? [1] : []
+
+      content {
+        username = var.smtp_username
+        password = var.smtp_password
+      }
+    }
+  }
+}
+
+
+# =========================================================================
+# REQUIRED ACTIONS
+# =========================================================================
+# Enables the "Update Email" required action so that users can correct
+# their email address themselves before/instead of a plain email
+# verification (which offers no way to fix a wrong address).
+# =========================================================================
+
+resource "keycloak_required_action" "update_email" {
+  realm_id = keycloak_realm.adyl_creation.id
+
+  alias = "UPDATE_EMAIL"
+  name  = "Update Email"
+
+  enabled = true
+
+  default_action = false
+
+  config = {
+    verifyEmail = "true"
+  }
 }
 
 
@@ -150,7 +204,6 @@ resource "keycloak_openid_client_default_scopes" "frontend" {
 
   default_scopes = [
     "basic",
-    "openid",
     "profile",
     "email",
     "roles",
@@ -174,11 +227,11 @@ resource "keycloak_generic_protocol_mapper" "api_phone" {
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
-    "user.attribute"      = "phone"
-    "claim.name"          = "phone"
-    "jsonType.label"      = "String"
-    "access.token.claim"  = "true"
-    "id.token.claim"      = "false"
+    "user.attribute"       = "phone"
+    "claim.name"           = "phone"
+    "jsonType.label"       = "String"
+    "access.token.claim"   = "true"
+    "id.token.claim"       = "false"
     "userinfo.token.claim" = "false"
   }
 }
