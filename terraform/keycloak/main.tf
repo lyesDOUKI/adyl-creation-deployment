@@ -12,6 +12,17 @@ resource "keycloak_realm" "adyl_creation" {
 
   registration_allowed = true
 
+
+
+  verify_email = true
+
+
+  edit_username_allowed = true
+
+
+
+  reset_password_allowed = true
+
   # -----------------------------------------------------------------------
   # Internationalization
   # -----------------------------------------------------------------------
@@ -71,7 +82,6 @@ resource "keycloak_required_action" "update_email" {
   name  = "Update Email"
 
   enabled = true
-
   default_action = false
 
   config = {
