@@ -55,6 +55,7 @@ services:
       KEYCLOAK_URL: "{{ keycloak_hostname_url }}"
       KEYCLOAK_REALM: "{{ keycloak_realm }}"
       KEYCLOAK_CLIENT_ID: "adyl-creation-front"
+      GEOCODE_API_URL: "{{ api_gouv_url }}"
 
     tmpfs:
       - /var/cache/nginx

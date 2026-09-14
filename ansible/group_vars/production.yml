@@ -199,3 +199,5 @@ letsencrypt_domains:
   - "{{ keycloak_hostname }}"
   - "{{ keycloak_admin_hostname }}"
   - "{{ netdata_hostname }}"
+
+api_gouv_url: 'https://data.geopf.fr/geocodage/search'
